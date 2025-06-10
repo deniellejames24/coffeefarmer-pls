@@ -38,6 +38,7 @@ const HarvestReporting = () => {
   const [farmerDetails, setFarmerDetails] = useState(null); // Will hold the current farmer's details
   const [plantDataList, setPlantDataList] = useState([]); // To populate the plant_id dropdown
   const [harvestDataList, setHarvestDataList] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('All');
   const [harvestInputForm, setHarvestInputForm] = useState({
     harvest_id: null, // null for new entry, ID for editing
     farmer_id: null,
@@ -409,6 +410,22 @@ const HarvestReporting = () => {
     const commercialGrade = parseFloat(name === 'coffee_commercial_grade' ? value : harvestInputForm.coffee_commercial_grade) || 0;
     
     return (premiumGrade + fineGrade + commercialGrade) <= maxDryQuantity;
+  };
+
+  // Add function to get unique years from harvest data
+  const getUniqueYears = () => {
+    const years = harvestDataList.map(harvest => 
+      new Date(harvest.harvest_date).getFullYear().toString()
+    );
+    return ['All', ...Array.from(new Set(years)).sort((a, b) => b - a)];
+  };
+
+  // Add function to filter harvests by year
+  const getFilteredHarvests = () => {
+    if (selectedYear === 'All') return harvestDataList;
+    return harvestDataList.filter(harvest => 
+      new Date(harvest.harvest_date).getFullYear().toString() === selectedYear
+    );
   };
 
   return (
@@ -863,15 +880,32 @@ const HarvestReporting = () => {
           <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
             <div className="flex items-center justify-between mb-6">
               <h3 className={`text-xl font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Harvest History</h3>
-              <div className={`p-3 rounded-full ${isDarkMode ? 'bg-blue-900' : 'bg-blue-100'}`}>
-                <svg className={`w-6 h-6 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
+              <div className="flex items-center space-x-4">
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className={`px-3 py-2 rounded-lg border ${
+                    isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500'
+                      : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'
+                  } focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors`}
+                >
+                  {getUniqueYears().map(year => (
+                    <option key={year} value={year}>
+                      {year === 'All' ? 'All Years' : year}
+                    </option>
+                  ))}
+                </select>
+                <div className={`p-3 rounded-full ${isDarkMode ? 'bg-blue-900' : 'bg-blue-100'}`}>
+                  <svg className={`w-6 h-6 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {harvestDataList.map((harvest) => (
+              {getFilteredHarvests().map((harvest) => (
                 <div
                   key={harvest.harvest_id}
                   className={`p-6 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} hover:shadow-lg transition-shadow duration-200`}

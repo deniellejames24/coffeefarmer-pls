@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useTheme } from "../lib/ThemeContext";
 import "../styles/Styles.css"; // Ensure your styles are imported
+import Layout from '../components/Layout';
 
 // Import Chart.js components
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
@@ -342,9 +343,9 @@ const FarmerDashboard = () => {
     { name: "User Profile", path: "/user-profile" },
     { name: "Predictive Analytics", path: "/predictive-analytics" },
     { name: "DSS Recommendations", path: "/dss-recommendations" },
-    { name: "Coffee Grade Predictor", path: "/coffee-grader" },
     { name: "Land & Plant Declaration", path: "/land-declaration" },
     { name: "Harvest Reporting", path: "/harvest-reporting" },
+    { name: "Revenue Forecast", path: "/revenue-forecast" },
   ];
 
   const navLinks = farmerNavLinks;
@@ -444,272 +445,209 @@ const FarmerDashboard = () => {
 
   if (loading) {
     return (
-      <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <Layout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"></div>
+            <div className={`h-8 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded w-1/4 mb-8`}></div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[1, 2, 3].map((i) => (
                 <div key={i} className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
-                  <div className="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
-                  <div className="h-8 bg-gray-200 rounded w-3/4"></div>
+                  <div className={`h-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded w-1/2 mb-4`}></div>
+                  <div className={`h-8 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded w-3/4`}></div>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
   if (error) {
     return (
-      <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <Layout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
             <h1 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Error</h1>
             <p className={`mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{error}</p>
           </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} flex`}>
-      {/* Sidebar Navigation */}
-      <div className={`w-64 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg relative`}>
-        <div className={`p-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="text-2xl">☕</div>
-              <h1 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Farmer Panel</h1>
+    <Layout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className={`mb-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
+          <h2 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            Farmer Dashboard
+          </h2>
+          {user && (
+            <p className={`mt-2 text-lg ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              Welcome back, <span className="font-semibold">{user.first_name} {user.last_name}</span>
+            </p>
+          )}
+          <p className={`mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Monitor your farm's performance and activities
+          </p>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Total Plants</h3>
+                <p className={`mt-2 text-3xl font-bold ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>{totalFarmerPlants}</p>
+              </div>
+              <div className={`p-3 rounded-full ${isDarkMode ? 'bg-indigo-900' : 'bg-indigo-100'}`}>
+                <svg className={`w-6 h-6 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </div>
             </div>
-            <button
-              onClick={toggleTheme}
-              className={`p-2 rounded-md ${isDarkMode ? 'text-yellow-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100'}`}
-            >
-              {isDarkMode ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          </div>
+
+          <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Raw Harvest</h3>
+                <p className={`mt-2 text-3xl font-bold ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>{totalRawHarvests} kg</p>
+              </div>
+              <div className={`p-3 rounded-full ${isDarkMode ? 'bg-green-900' : 'bg-green-100'}`}>
+                <svg className={`w-6 h-6 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
                 </svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </div>
+            </div>
+          </div>
+
+          <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Dry Harvest</h3>
+                <p className={`mt-2 text-3xl font-bold ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>{totalDryHarvests} kg</p>
+              </div>
+              <div className={`p-3 rounded-full ${isDarkMode ? 'bg-amber-900' : 'bg-amber-100'}`}>
+                <svg className={`w-6 h-6 ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
-              )}
-            </button>
+              </div>
+            </div>
           </div>
         </div>
-        <nav className="p-4">
-          <ul className="space-y-2">
-            {farmerNavLinks.map((link) => (
-              <li key={link.path}>
-                <button
-                  onClick={() => navigate(link.path)}
-                  className={`w-full text-left px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    location.pathname === link.path
-                      ? isDarkMode 
-                        ? 'bg-gray-700 text-indigo-400'
-                        : 'bg-indigo-50 text-indigo-500'
-                      : isDarkMode
-                        ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-indigo-400'
-                        : 'bg-white text-gray-500 hover:bg-gray-50 hover:text-indigo-400'
-                  }`}
-                >
-                  {link.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className={`sticky bottom-0 w-full p-4 border-t ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
-          <button
-            onClick={handleLogout}
-            className={`w-full px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-              isDarkMode
-                ? 'text-indigo-400 bg-gray-700 hover:bg-gray-600 focus:ring-indigo-500'
-                : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100 focus:ring-indigo-500'
-            }`}
-          >
-            Logout
-          </button>
-        </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Header */}
-          <div className={`mb-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
-            <h2 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Farmer Dashboard
-            </h2>
-            {user && (
-              <p className={`mt-2 text-lg ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                Welcome back, <span className="font-semibold">{user.first_name} {user.last_name}</span>
-              </p>
-            )}
-            <p className={`mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Monitor your farm's performance and activities
+        {/* Charts Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
+            <h3 className={`text-lg font-medium mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Harvest Distribution</h3>
+            <div className="h-64">
+              <Bar data={harvestBarChartData} options={harvestBarChartOptions} />
+            </div>
+          </div>
+
+          <div className="flex flex-col md:flex-row items-center justify-center gap-8 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md">
+            <div className="w-full md:w-1/2 max-w-md">
+              <h3 className="text-lg font-semibold mb-4 text-center">Grade Distribution</h3>
+              <Pie data={gradePieChartData} options={gradePieChartOptions} />
+            </div>
+            <div className="w-full md:w-1/2 max-w-md">
+              <CustomLegend data={legendData} />
+            </div>
+          </div>
+        </div>
+
+        {/* Your Current Plants Section */}
+        <div className={`mt-8 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
+          <div className={`px-6 py-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+            <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Your Current Plants</h3>
+            <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Click on a plant to view its status and manage it.
             </p>
           </div>
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Total Plants</h3>
-                  <p className={`mt-2 text-3xl font-bold ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>{totalFarmerPlants}</p>
-                </div>
-                <div className={`p-3 rounded-full ${isDarkMode ? 'bg-indigo-900' : 'bg-indigo-100'}`}>
-                  <svg className={`w-6 h-6 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                </div>
+          <div className="p-6">
+            {plants.length === 0 ? (
+              <div className="text-center py-8">
+                <p className={`mb-4 text-lg ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  Please declare plant first.
+                </p>
+                <button
+                  className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors duration-200"
+                  onClick={() => navigate('/land-declaration')}
+                >
+                  Declare Plant
+                </button>
               </div>
-            </div>
-
-            <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Raw Harvest</h3>
-                  <p className={`mt-2 text-3xl font-bold ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>{totalRawHarvests} kg</p>
-                </div>
-                <div className={`p-3 rounded-full ${isDarkMode ? 'bg-green-900' : 'bg-green-100'}`}>
-                  <svg className={`w-6 h-6 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Dry Harvest</h3>
-                  <p className={`mt-2 text-3xl font-bold ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>{totalDryHarvests} kg</p>
-                </div>
-                <div className={`p-3 rounded-full ${isDarkMode ? 'bg-amber-900' : 'bg-amber-100'}`}>
-                  <svg className={`w-6 h-6 ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Charts Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
-              <h3 className={`text-lg font-medium mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Harvest Distribution</h3>
-              <div className="h-64">
-                <Bar data={harvestBarChartData} options={harvestBarChartOptions} />
-              </div>
-            </div>
-
-            <div className="flex flex-col md:flex-row items-center justify-center gap-8 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md">
-              <div className="w-full md:w-1/2 max-w-md">
-                <h3 className="text-lg font-semibold mb-4 text-center">Grade Distribution</h3>
-                <Pie data={gradePieChartData} options={gradePieChartOptions} />
-              </div>
-              <div className="w-full md:w-1/2 max-w-md">
-                <CustomLegend data={legendData} />
-              </div>
-            </div>
-          </div>
-
-          {/* Your Current Plants Section */}
-          <div className={`mt-8 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
-            <div className={`px-6 py-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-              <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Your Current Plants</h3>
-              <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                Click on a plant to view its status and manage it.
-              </p>
-            </div>
-            <div className="p-6">
-              {plants.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className={`mb-4 text-lg ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                    Please declare plant first.
-                  </p>
-                  <button
-                    className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors duration-200"
-                    onClick={() => navigate('/land-declaration')}
+            ) : (
+              <div className="space-y-4">
+                {plants.map((plant) => (
+                  <div
+                    key={plant.plant_id}
+                    className={`p-6 rounded-lg shadow-md ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} 
+                      hover:shadow-lg transition-all duration-200 cursor-pointer`}
+                    onClick={() => handlePlantClick(plant)}
                   >
-                    Declare Plant
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {plants.map((plant) => (
-                    <div
-                      key={plant.plant_id}
-                      className={`p-6 rounded-lg shadow-md ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} 
-                        hover:shadow-lg transition-all duration-200 cursor-pointer`}
-                      onClick={() => handlePlantClick(plant)}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                            {plant.coffee_variety}
-                          </h3>
-                          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Trees: {plant.number_of_tree_planted}
-                          </p>
-                          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Planted: {new Date(plant.planting_date).toLocaleDateString()}
-                          </p>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {plant.coffee_variety}
+                        </h3>
+                        <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Trees: {plant.number_of_tree_planted}
+                        </p>
+                        <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Planted: {new Date(plant.planting_date).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {statuses[plant.plant_id] && (
+                        <div className={`px-4 py-2 rounded-full text-sm font-medium
+                          ${getStatusColor(statuses[plant.plant_id].status)}`}>
+                          {statuses[plant.plant_id].status}
                         </div>
-                        {statuses[plant.plant_id] && (
-                          <div className={`px-4 py-2 rounded-full text-sm font-medium
-                            ${getStatusColor(statuses[plant.plant_id].status)}`}>
-                            {statuses[plant.plant_id].status}
-                          </div>
-                        )}
-                        <div className={`ml-4 p-2 rounded-full ${
-                          isDarkMode ? 'bg-gray-600 text-indigo-400' : 'bg-gray-200 text-indigo-600'
-                        }`}>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                          </svg>
-                        </div>
+                      )}
+                      <div className={`ml-4 p-2 rounded-full ${
+                        isDarkMode ? 'bg-gray-600 text-indigo-400' : 'bg-gray-200 text-indigo-600'
+                      }`}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                        </svg>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Activities */}
-          <div className={`mt-8 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
-            <div className={`px-6 py-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-              <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Recent Activities</h3>
-            </div>
-            <div className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
-              {recentFarmerActivities.map((activity, index) => (
-                <div key={index} className="px-6 py-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{activity.activity}</p>
-                      <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{activity.date}</p>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium
-                      ${isDarkMode 
-                        ? 'bg-green-900 text-green-200' 
-                        : 'bg-green-100 text-green-800'}`}>
-                      {activity.status}
-                    </span>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Recent Activities */}
+        <div className={`mt-8 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} hover:shadow-xl transition-shadow duration-200`}>
+          <div className={`px-6 py-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+            <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Recent Activities</h3>
+          </div>
+          <div className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
+            {recentFarmerActivities.map((activity, index) => (
+              <div key={index} className="px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{activity.activity}</p>
+                    <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{activity.date}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium
+                    ${isDarkMode 
+                      ? 'bg-green-900 text-green-200' 
+                      : 'bg-green-100 text-green-800'}`}>
+                    {activity.status}
+                  </span>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
-    </div>
+    </Layout>
   );
 };
 

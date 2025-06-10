@@ -61,6 +61,11 @@ const FarmerProfile = () => {
     qualityTrend: null
   });
 
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editedBasicInfo, setEditedBasicInfo] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+
   // Fetch all farmer data
   const fetchFarmerData = useCallback(async () => {
     try {
@@ -266,6 +271,64 @@ const FarmerProfile = () => {
     setCharts(chartData);
   };
 
+  const handleEditClick = () => {
+    // Split the full name to get individual components
+    const nameParts = farmerData.basicInfo.name.split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts[nameParts.length - 1];
+    const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '';
+
+    setEditedBasicInfo({
+      first_name: firstName,
+      middle_name: middleName,
+      last_name: lastName,
+      farm_location: farmerData.basicInfo.farmLocation,
+      farm_size: farmerData.basicInfo.farmSize,
+      farm_elevation: farmerData.basicInfo.farmElevation
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveChanges = async () => {
+    try {
+      setIsSaving(true);
+      setSaveError(null);
+
+      // Update user information
+      const { error: userError } = await supabase
+        .from('users')
+        .update({
+          first_name: editedBasicInfo.first_name,
+          middle_name: editedBasicInfo.middle_name,
+          last_name: editedBasicInfo.last_name
+        })
+        .eq('id', farmerId);
+
+      if (userError) throw userError;
+
+      // Update farmer details
+      const { error: farmerError } = await supabase
+        .from('farmer_detail')
+        .update({
+          farm_location: editedBasicInfo.farm_location,
+          farm_size: editedBasicInfo.farm_size,
+          farm_elevation: editedBasicInfo.farm_elevation
+        })
+        .eq('id', farmerId);
+
+      if (farmerError) throw farmerError;
+
+      // Refresh data
+      await fetchFarmerData();
+      setIsEditModalOpen(false);
+    } catch (err) {
+      console.error('Error saving changes:', err);
+      setSaveError('Failed to save changes. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!user) {
     return <Navigate to="/login" />;
   }
@@ -324,9 +387,22 @@ const FarmerProfile = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Basic Information */}
               <div className={`rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-6`}>
-                <h2 className={`text-xl font-semibold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                  Basic Information
-                </h2>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                    Basic Information
+                  </h2>
+                  {user?.role === 'admin' && (
+                    <button
+                      onClick={handleEditClick}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                        ${isDarkMode
+                          ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 gap-6">
                   <div>
                     <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Email</p>
@@ -589,6 +665,130 @@ const FarmerProfile = () => {
                     </p>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Modal */}
+        {isEditModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className={`rounded-lg shadow-xl max-w-md w-full ${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-6`}>
+              <h3 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                Edit Basic Information
+              </h3>
+              
+              {saveError && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
+                  {saveError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    First Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editedBasicInfo.first_name}
+                    onChange={(e) => setEditedBasicInfo({ ...editedBasicInfo, first_name: e.target.value })}
+                    className={`mt-1 block w-full rounded-md border ${
+                      isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Middle Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editedBasicInfo.middle_name}
+                    onChange={(e) => setEditedBasicInfo({ ...editedBasicInfo, middle_name: e.target.value })}
+                    className={`mt-1 block w-full rounded-md border ${
+                      isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editedBasicInfo.last_name}
+                    onChange={(e) => setEditedBasicInfo({ ...editedBasicInfo, last_name: e.target.value })}
+                    className={`mt-1 block w-full rounded-md border ${
+                      isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Farm Location
+                  </label>
+                  <input
+                    type="text"
+                    value={editedBasicInfo.farm_location}
+                    onChange={(e) => setEditedBasicInfo({ ...editedBasicInfo, farm_location: e.target.value })}
+                    className={`mt-1 block w-full rounded-md border ${
+                      isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Farm Size (hectares)
+                  </label>
+                  <input
+                    type="number"
+                    value={editedBasicInfo.farm_size}
+                    onChange={(e) => setEditedBasicInfo({ ...editedBasicInfo, farm_size: e.target.value })}
+                    className={`mt-1 block w-full rounded-md border ${
+                      isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Farm Elevation (meters)
+                  </label>
+                  <input
+                    type="number"
+                    value={editedBasicInfo.farm_elevation}
+                    onChange={(e) => setEditedBasicInfo({ ...editedBasicInfo, farm_elevation: e.target.value })}
+                    className={`mt-1 block w-full rounded-md border ${
+                      isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={() => setIsEditModalOpen(false)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    isDarkMode
+                      ? 'bg-gray-700 text-white hover:bg-gray-600'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveChanges}
+                  disabled={isSaving}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 
+                    ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
               </div>
             </div>
           </div>

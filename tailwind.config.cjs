@@ -6,7 +6,19 @@ module.exports = {
   ],
   darkMode: 'class',
   theme: {
-    extend: {},
+    extend: {
+      // Custom scrollbar styles
+      scrollbar: {
+        DEFAULT: {
+          size: '8px',
+          track: 'transparent',
+          thumb: '#CBD5E0',
+          hover: '#A0AEC0',
+        },
+      },
+    },
   },
-  plugins: [],
+  plugins: [
+    require('tailwind-scrollbar')({ nocompatible: true }),
+  ],
 } 

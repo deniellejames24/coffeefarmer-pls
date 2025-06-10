@@ -226,7 +226,27 @@ const PredictiveAnalytics = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Input States for Prediction
+  // Remove duplicate isLoading state and use the existing loading state
+  const [mlAnalysis, setMlAnalysis] = useState(null);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("");
+
+  // Add error handling utility
+  const handleError = (error, customMessage = '') => {
+    console.error(customMessage || 'An error occurred:', error);
+    setError(error.message);
+    setMessageType('error');
+    setMessage(customMessage || error.message);
+  };
+
+  // Add cleanup utility
+  const cleanup = () => {
+    setLoading(false);
+    setError(null);
+    setMessage("");
+  };
+
+  // Input States for Prediction with validation
   const [previousYield, setPreviousYield] = useState("");
   const [avgTemperature, setAvgTemperature] = useState("");
   const [avgRainfall, setAvgRainfall] = useState("");
@@ -237,19 +257,14 @@ const PredictiveAnalytics = () => {
   const [predictedYield, setPredictedYield] = useState("");
   const [recommendations, setRecommendations] = useState([]);
   const [confidenceScore, setConfidenceScore] = useState(0);
-  const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState(""); // 'success', 'error', 'info'
 
   // Add new state for historical data
   const [historicalHarvests, setHistoricalHarvests] = useState([]);
   const [plantStatuses, setPlantStatuses] = useState([]);
   const [weatherForecast, setWeatherForecast] = useState(null);
 
-  // Chart data state
+  // Chart data state with cleanup
   const [yieldChartData, setYieldChartData] = useState(null);
-
-  // Loading and error states
-  const [isLoading, setIsLoading] = useState(false);
 
   // Add weights for different factors
   const factorWeights = {
@@ -274,9 +289,6 @@ const PredictiveAnalytics = () => {
   const [editingCards, setEditingCards] = useState(new Set());
 
   // State management
-  const [mlAnalysis, setMlAnalysis] = useState(null);
-
-  // Current conditions state
   const [currentConditions, setCurrentConditions] = useState({
     pH: 6.0,
     moisture: 'moderate',
@@ -286,6 +298,55 @@ const PredictiveAnalytics = () => {
   // New state for quality distribution
   const [qualityDistribution, setQualityDistribution] = useState(null);
   const [seasonalYields, setSeasonalYields] = useState(null);
+
+  // Add state for coffee prices
+  const [coffeePrices, setCoffeePrices] = useState({
+    premium: 0,
+    fine: 0,
+    commercial: 0,
+    currency: 'PHP'
+  });
+
+  // Add new state variables after the existing ones
+  const [futureYieldPredictions, setFutureYieldPredictions] = useState(null);
+  const [qualityGradePredictions, setQualityGradePredictions] = useState(null);
+  const [seasonalYieldForecast, setSeasonalYieldForecast] = useState(null);
+  const [historicalTrendAnalysis, setHistoricalTrendAnalysis] = useState(null);
+
+  // Add function to fetch coffee prices
+  const fetchCoffeePrices = async () => {
+    try {
+      const { data: prices, error } = await supabase
+        .from('coffee_prices')
+        .select('coffee_type, price_per_kg, currency')
+        .eq('is_active', true);
+
+      if (error) throw error;
+
+      const priceMap = {
+        premium: 0,
+        fine: 0,
+        commercial: 0,
+        currency: 'PHP'
+      };
+
+      prices.forEach(price => {
+        if (price.coffee_type === 'premium') priceMap.premium = price.price_per_kg;
+        if (price.coffee_type === 'fine') priceMap.fine = price.price_per_kg;
+        if (price.coffee_type === 'commercial') priceMap.commercial = price.price_per_kg;
+        if (price.currency) priceMap.currency = price.currency;
+      });
+
+      setCoffeePrices(priceMap);
+    } catch (err) {
+      console.error('Error fetching coffee prices:', err);
+    }
+  };
+
+  // Add useEffect to fetch prices
+  useEffect(() => {
+    fetchCoffeePrices();
+  }, []);
 
   // Function to safely parse numeric values with validation
   const safeParseFloat = (value, defaultValue = 0) => {
@@ -353,11 +414,10 @@ const PredictiveAnalytics = () => {
   };
 
   useEffect(() => {
+    let isSubscribed = true;
+
     const fetchData = async () => {
       try {
-        setLoading(true);
-        setError(null);
-
         if (!user?.id) {
           throw new Error('User not authenticated');
         }
@@ -370,6 +430,7 @@ const PredictiveAnalytics = () => {
           .single();
 
         if (farmerError) throw farmerError;
+        if (!isSubscribed) return;
         setFarmerDetails(farmerData);
 
         // Fetch plants
@@ -379,6 +440,8 @@ const PredictiveAnalytics = () => {
           .eq('farmer_id', user.id);
 
         if (plantError) throw plantError;
+        if (!isSubscribed) return;
+        
         const validPlants = (plantData || []).filter(p => p && p.plant_id != null);
         setPlants(validPlants);
 
@@ -394,10 +457,12 @@ const PredictiveAnalytics = () => {
           .order('harvest_date', { ascending: true });
 
         if (harvestError) throw harvestError;
+        if (!isSubscribed) return;
+        
         const processedHarvests = processHarvestData(harvests || []);
         setHistoricalHarvests(processedHarvests);
 
-        // Fetch plant statuses (which includes environmental data)
+        // Fetch plant statuses
         const { data: statuses, error: statusError } = await supabase
           .from('plant_status')
           .select('*')
@@ -405,13 +470,14 @@ const PredictiveAnalytics = () => {
           .order('created_at', { ascending: false });
 
         if (statusError) throw statusError;
+        if (!isSubscribed) return;
 
-        // Process plant statuses to create environmental data
+        // Process plant statuses
         const validStatuses = (statuses || [])
           .filter(s => s != null)
           .map(status => ({
             ...status,
-            temperature: 25, // Default temperature since it's not in the schema
+            temperature: safeParseFloat(status.temperature, 25),
             humidity: moistureToNumeric(status.moisture_level),
             soil_ph: safeParseFloat(status.soil_ph, 6.5),
             timestamp: status.created_at,
@@ -425,22 +491,23 @@ const PredictiveAnalytics = () => {
         
         setPlantStatuses(validStatuses);
 
-        // Set current conditions from latest plant status
+        // Update current conditions
         if (validStatuses.length > 0) {
           const latestStatus = validStatuses[0];
-          setCurrentConditions(prev => ({
-            ...prev,
-            temperature: safeParseFloat(latestStatus.temperature, 25),
-            humidity: safeParseFloat(latestStatus.humidity, 70),
-            pH: safeParseFloat(latestStatus.soil_ph, 6.5),
-            moisture: latestStatus.moisture_level || 'moderate',
-            lastFertilized: latestStatus.last_fertilized || new Date().toISOString().split('T')[0]
-          }));
+          if (isSubscribed) {
+            setCurrentConditions(prev => ({
+              ...prev,
+              temperature: safeParseFloat(latestStatus.temperature, 25),
+              humidity: safeParseFloat(latestStatus.humidity, 70),
+              pH: safeParseFloat(latestStatus.soil_ph, 6.5),
+              moisture: latestStatus.moisture_level || 'moderate',
+              lastFertilized: latestStatus.last_fertilized || new Date().toISOString().split('T')[0]
+            }));
+          }
         }
 
-        // Initialize ML analytics only if we have both harvest data and environmental data
+        // Initialize ML analytics
         if (processedHarvests.length > 0 && validStatuses.length > 0) {
-          // Create environmental data from plant statuses
           const environmentalData = validStatuses.map(status => ({
             temperature: safeParseFloat(status.temperature, 25),
             humidity: safeParseFloat(status.humidity, 70),
@@ -449,62 +516,53 @@ const PredictiveAnalytics = () => {
             fertilizer_level: getDaysSinceLastFertilized(status.last_fertilized) < 30 ? 1 : 0
           }));
 
-          // Initialize analytics with processed data
-          analytics.initializeWithHistoricalData(processedHarvests, environmentalData);
+          if (isSubscribed) {
+            analytics.initializeWithHistoricalData(processedHarvests, environmentalData);
 
-          // Update analysis with latest conditions
-          const latestStatus = validStatuses[0];
-          const analysisConditions = {
-            temperature: Math.max(0, safeParseFloat(latestStatus.temperature, 25)),
-            humidity: Math.max(0, safeParseFloat(latestStatus.humidity, 70)),
-            pH: Math.max(0, safeParseFloat(latestStatus.soil_ph, 6.5)),
-            rainfall: Math.max(0, safeParseFloat(latestStatus.rainfall, 1500)),
-            pestDiseaseIncidence: Math.max(0, safeParseFloat(latestStatus.pestDiseaseIncidence, 0)),
-            fertilizerApplication: Math.max(0, safeParseFloat(latestStatus.last_fertilized ? 1 : 0, 0))
-          };
+            const latestStatus = validStatuses[0];
+            const analysisConditions = {
+              temperature: Math.max(0, safeParseFloat(latestStatus.temperature, 25)),
+              humidity: Math.max(0, safeParseFloat(latestStatus.humidity, 70)),
+              pH: Math.max(0, safeParseFloat(latestStatus.soil_ph, 6.5)),
+              rainfall: Math.max(0, safeParseFloat(latestStatus.rainfall, 1500)),
+              pestDiseaseIncidence: Math.max(0, safeParseFloat(latestStatus.pestDiseaseIncidence, 0)),
+              fertilizerApplication: Math.max(0, safeParseFloat(latestStatus.last_fertilized ? 1 : 0, 0))
+            };
 
-          // Validate conditions and provide specific error messages
-          const invalidConditions = Object.entries(analysisConditions)
-            .filter(([_, value]) => typeof value !== 'number' || value < 0)
-            .map(([key]) => key);
-
-          if (invalidConditions.length > 0) {
-            console.warn('Invalid environmental conditions:', invalidConditions);
-            // Instead of throwing error, use default values
-            analysisConditions.temperature = Math.max(analysisConditions.temperature, 25);
-            analysisConditions.humidity = Math.max(analysisConditions.humidity, 70);
-            analysisConditions.pH = Math.max(analysisConditions.pH, 6.5);
-            analysisConditions.rainfall = Math.max(analysisConditions.rainfall, 1500);
-            analysisConditions.pestDiseaseIncidence = Math.max(analysisConditions.pestDiseaseIncidence, 0);
-            analysisConditions.fertilizerApplication = Math.max(analysisConditions.fertilizerApplication, 0);
+            await updateAnalysis(analysisConditions);
           }
-
-          await updateAnalysis(analysisConditions);
         } else {
           console.warn('Insufficient data for analysis');
-          // Use default values instead of throwing error
-          const defaultConditions = {
-            temperature: 25,
-            humidity: 70,
-            pH: 6.5,
-            rainfall: 1500,
-            pestDiseaseIncidence: 0,
-            fertilizerApplication: 0
-          };
-          await updateAnalysis(defaultConditions);
+          if (isSubscribed) {
+            await updateAnalysis({
+              temperature: 25,
+              humidity: 70,
+              pH: 6.5,
+              rainfall: 1500,
+              pestDiseaseIncidence: 0,
+              fertilizerApplication: 0
+            });
+          }
         }
 
       } catch (err) {
-        console.error('Error fetching data:', err);
-        setError(err.message);
+        if (isSubscribed) {
+          handleError(err, 'Error fetching data');
+        }
       } finally {
-        setLoading(false);
+        if (isSubscribed) {
+          cleanup();
+        }
       }
     };
 
     if (user) {
       fetchData();
     }
+
+    return () => {
+      isSubscribed = false;
+    };
   }, [user]);
 
   const updateAnalysis = async (conditions) => {
@@ -569,25 +627,70 @@ const PredictiveAnalytics = () => {
   };
 
   const updateYieldChart = (harvests) => {
-    if (!harvests.length) return;
+    if (!Array.isArray(harvests) || harvests.length === 0) {
+      setYieldChartData(null);
+      return;
+    }
+
+    try {
+      const validHarvests = harvests
+        .filter(h => h && h.harvest_date && typeof h.coffee_raw_quantity === 'number')
+        .sort((a, b) => new Date(a.harvest_date) - new Date(b.harvest_date));
+
+      if (validHarvests.length === 0) {
+        setYieldChartData(null);
+        return;
+      }
 
     const chartData = {
-      labels: harvests.map(h => new Date(h.harvest_date).toLocaleDateString()),
+        labels: validHarvests.map(h => {
+          const date = new Date(h.harvest_date);
+          return date instanceof Date && !isNaN(date) 
+            ? date.toLocaleDateString()
+            : 'Invalid Date';
+        }).filter(date => date !== 'Invalid Date'),
       datasets: [
         {
           label: 'Raw Coffee Yield (kg)',
-          data: harvests.map(h => h.coffee_raw_quantity),
+            data: validHarvests.map(h => safeParseFloat(h.coffee_raw_quantity, 0)),
           borderColor: isDarkMode ? 'rgba(147, 197, 253, 1)' : 'rgba(59, 130, 246, 1)',
           backgroundColor: isDarkMode ? 'rgba(147, 197, 253, 0.5)' : 'rgba(59, 130, 246, 0.5)',
+            fill: true,
+            tension: 0.4
         }
       ]
     };
 
+      if (chartData.labels.length > 0 && chartData.datasets[0].data.length === chartData.labels.length) {
     setYieldChartData(chartData);
+      } else {
+        console.warn('Invalid chart data structure');
+        setYieldChartData(null);
+      }
+    } catch (error) {
+      console.error('Error updating yield chart:', error);
+      setYieldChartData(null);
+    }
   };
 
+  // Add effect to update chart when harvests or theme changes
+  useEffect(() => {
+    if (historicalHarvests.length > 0) {
+      updateYieldChart(historicalHarvests);
+    }
+  }, [historicalHarvests, isDarkMode]);
+
+  // Add chart cleanup effect
+  useEffect(() => {
+    return () => {
+      if (yieldChartData) {
+        setYieldChartData(null);
+      }
+    };
+  }, []);
+
   const predictYield = async () => {
-    setIsLoading(true);
+    setLoading(true);
     setPredictedYield("");
     setRecommendations([]);
     setError("");
@@ -597,22 +700,33 @@ const PredictiveAnalytics = () => {
         throw new Error("No historical harvest data available for prediction");
       }
 
-      // Calculate base prediction from historical data
-      const recentHarvests = historicalHarvests.slice(-3);
-      const avgHistoricalYield = recentHarvests.reduce((sum, h) => sum + h.coffee_raw_quantity, 0) / recentHarvests.length;
+      // Validate and calculate base prediction from historical data
+      const recentHarvests = historicalHarvests
+        .filter(h => h && typeof h.coffee_raw_quantity === 'number')
+        .slice(-3);
 
-      // Adjust prediction based on weather
+      if (recentHarvests.length === 0) {
+        throw new Error("No valid recent harvest data available");
+      }
+
+      const avgHistoricalYield = recentHarvests.reduce((sum, h) => 
+        sum + safeParseFloat(h.coffee_raw_quantity, 0), 0) / recentHarvests.length;
+
+      // Validate and adjust prediction based on weather
       let weatherImpact = 0;
       if (weatherForecast) {
+        const temperature = safeParseFloat(weatherForecast.temperature, 21);
+        const annualRainfall = safeParseFloat(weatherForecast.rainfall, 0) * 12;
+
         // Optimal conditions: Temperature 18-24°C, Rainfall 1500-2500mm annually
-        const tempDiff = Math.abs(weatherForecast.temperature - 21); // 21°C is ideal
-        const rainDiff = Math.abs(weatherForecast.rainfall * 12 - 2000); // Scale to annual rainfall
+        const tempDiff = Math.abs(temperature - 21); // 21°C is ideal
+        const rainDiff = Math.abs(annualRainfall - 2000); // 2000mm is ideal
 
         weatherImpact = (tempDiff > 3 ? -0.1 : 0.1) + (rainDiff > 500 ? -0.1 : 0.1);
       }
 
-      // Get latest plant status
-      const { data: latestStatus } = await supabase
+      // Get and validate latest plant status
+      const { data: latestStatus, error: statusError } = await supabase
         .from("plant_status")
         .select("*")
         .eq("farmer_id", user.id)
@@ -620,56 +734,65 @@ const PredictiveAnalytics = () => {
         .limit(1)
         .single();
 
-      // Adjust prediction based on plant status
+      if (statusError) throw statusError;
+
+      // Calculate status impact and generate recommendations
       let statusImpact = 0;
-      const recommendations = [];
+      const newRecommendations = [];
 
       if (latestStatus) {
-        // Soil pH impact (optimal range: 5.5-6.5)
-        if (latestStatus.soil_ph) {
-          const pH = parseFloat(latestStatus.soil_ph);
+        // Validate and check soil pH impact (optimal range: 5.5-6.5)
+        const pH = safeParseFloat(latestStatus.soil_ph, 6.0);
           if (pH < 5.5 || pH > 6.5) {
             statusImpact -= 0.1;
-            recommendations.push(`Adjust soil pH to optimal range (5.5-6.5). Current pH: ${pH}`);
-          }
+          newRecommendations.push(`Adjust soil pH to optimal range (5.5-6.5). Current pH: ${pH.toFixed(1)}`);
         }
 
-        // Moisture impact
+        // Validate and check moisture impact
         if (latestStatus.moisture_level === 'dry') {
           statusImpact -= 0.15;
-          recommendations.push("Increase irrigation to improve soil moisture");
+          newRecommendations.push("Increase irrigation to improve soil moisture");
         }
 
-        // Disease impact
+        // Validate and check disease impact
         if (latestStatus.status === 'diseased') {
           statusImpact -= 0.2;
-          recommendations.push("Implement disease management practices immediately");
+          newRecommendations.push("Implement disease management practices immediately");
         }
       }
 
-      // Calculate final prediction
-      const predictedAmount = avgHistoricalYield * (1 + weatherImpact + statusImpact);
+      // Calculate final prediction with validation
+      const baseYield = Math.max(0, avgHistoricalYield);
+      const impactMultiplier = Math.max(0.5, 1 + weatherImpact + statusImpact);
+      const predictedAmount = baseYield * impactMultiplier;
+
+      // Calculate confidence score
       const confidenceScore = calculateConfidenceScore(weatherImpact, statusImpact, historicalHarvests.length);
 
-      // Add weather-based recommendations
+      // Add weather-based recommendations with validation
       if (weatherForecast) {
-        if (weatherForecast.temperature > 24) {
-          recommendations.push("Consider additional shade measures due to high temperatures");
+        const temperature = safeParseFloat(weatherForecast.temperature, 21);
+        const annualRainfall = safeParseFloat(weatherForecast.rainfall, 0) * 12;
+
+        if (temperature > 24) {
+          newRecommendations.push("Consider additional shade measures due to high temperatures");
         }
-        if (weatherForecast.rainfall * 12 < 1500) {
-          recommendations.push("Plan for supplementary irrigation due to expected low rainfall");
+        if (annualRainfall < 1500) {
+          newRecommendations.push("Plan for supplementary irrigation due to expected low rainfall");
         }
       }
 
+      // Update state with validated data
       setPredictedYield(`${predictedAmount.toFixed(2)} kg/hectare`);
-      setRecommendations(recommendations);
+      setRecommendations(newRecommendations);
       setConfidenceScore(confidenceScore);
+      setMessageType('success');
+      setMessage('Prediction completed successfully');
 
     } catch (error) {
-      console.error("Prediction error:", error);
-      setError(error.message);
+      handleError(error, 'Error during yield prediction');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -877,8 +1000,186 @@ const PredictiveAnalytics = () => {
     }
   }, [currentConditions, historicalHarvests]);
 
+  // Add new functions after the existing ones
+  const calculateFutureYieldPredictions = (historicalData, currentConditions) => {
+    if (!historicalData || historicalData.length === 0) return null;
+
+    const recentHarvests = historicalData.slice(-6); // Use last 6 harvests
+    const avgYield = recentHarvests.reduce((sum, h) => sum + h.coffee_raw_quantity, 0) / recentHarvests.length;
+    
+    // Calculate trend
+    const trend = recentHarvests.length >= 2 
+      ? (recentHarvests[recentHarvests.length - 1].coffee_raw_quantity - recentHarvests[0].coffee_raw_quantity) 
+        / recentHarvests.length
+      : 0;
+
+    // Generate predictions for next 3 harvests
+    const predictions = [];
+    let currentPrediction = avgYield;
+
+    for (let i = 0; i < 3; i++) {
+      currentPrediction += trend;
+      // Apply environmental factors
+      const environmentalFactor = calculateEnvironmentalFactor(currentConditions);
+      currentPrediction *= environmentalFactor;
+      predictions.push(Math.max(0, currentPrediction));
+    }
+
+    return predictions;
+  };
+
+  const calculateEnvironmentalFactor = (conditions) => {
+    let factor = 1.0;
+    
+    // Temperature impact (optimal range: 18-24°C)
+    const temp = parseFloat(conditions.temperature) || 21;
+    if (temp < 18 || temp > 24) {
+      factor *= 0.9;
+    }
+
+    // Soil pH impact (optimal range: 5.5-6.5)
+    const ph = parseFloat(conditions.pH) || 6.0;
+    if (ph < 5.5 || ph > 6.5) {
+      factor *= 0.95;
+    }
+
+    // Moisture impact
+    if (conditions.moisture === 'dry') {
+      factor *= 0.9;
+    }
+
+    return factor;
+  };
+
+  const predictQualityGrades = (historicalData, predictedYield) => {
+    if (!historicalData || historicalData.length === 0 || !predictedYield) return null;
+
+    // Calculate historical quality distribution ratios
+    const totalYield = historicalData.reduce((sum, h) => sum + h.coffee_raw_quantity, 0);
+    const premiumRatio = historicalData.reduce((sum, h) => sum + h.coffee_premium_grade, 0) / totalYield;
+    const fineRatio = historicalData.reduce((sum, h) => sum + h.coffee_fine_grade, 0) / totalYield;
+    const commercialRatio = historicalData.reduce((sum, h) => sum + h.coffee_commercial_grade, 0) / totalYield;
+
+    // Apply ratios to predicted yield
+    return {
+      premium: predictedYield * premiumRatio,
+      fine: predictedYield * fineRatio,
+      commercial: predictedYield * commercialRatio
+    };
+  };
+
+  const generateSeasonalForecast = (historicalData, currentConditions) => {
+    if (!historicalData || historicalData.length === 0) return null;
+
+    const currentMonth = new Date().getMonth();
+    const seasonalFactors = {
+      peak: { months: [2, 3, 4], factor: 1.2 }, // March-May
+      mid: { months: [8, 9, 10], factor: 0.8 }, // September-November
+      off: { months: [0, 1, 5, 6, 7, 11], factor: 0.4 } // Other months
+    };
+
+    const avgYield = historicalData.reduce((sum, h) => sum + h.coffee_raw_quantity, 0) / historicalData.length;
+    const environmentalFactor = calculateEnvironmentalFactor(currentConditions);
+
+    return {
+      peak: avgYield * seasonalFactors.peak.factor * environmentalFactor,
+      mid: avgYield * seasonalFactors.mid.factor * environmentalFactor,
+      off: avgYield * seasonalFactors.off.factor * environmentalFactor
+    };
+  };
+
+  const analyzeHistoricalTrends = (historicalData) => {
+    if (!historicalData || historicalData.length === 0) return null;
+
+    const sortedData = [...historicalData].sort((a, b) => 
+      new Date(a.harvest_date) - new Date(b.harvest_date)
+    );
+
+    // Calculate yield trends
+    const yieldTrends = sortedData.map((h, i) => ({
+      date: new Date(h.harvest_date),
+      yield: h.coffee_raw_quantity,
+      quality: {
+        premium: h.coffee_premium_grade,
+        fine: h.coffee_fine_grade,
+        commercial: h.coffee_commercial_grade
+      }
+    }));
+
+    // Calculate moving averages
+    const movingAverages = [];
+    const windowSize = 3;
+    for (let i = windowSize - 1; i < yieldTrends.length; i++) {
+      const window = yieldTrends.slice(i - windowSize + 1, i + 1);
+      const avgYield = window.reduce((sum, h) => sum + h.yield, 0) / windowSize;
+      movingAverages.push({
+        date: yieldTrends[i].date,
+        average: avgYield
+      });
+    }
+
+    return {
+      yieldTrends,
+      movingAverages,
+      overallTrend: calculateOverallTrend(yieldTrends)
+    };
+  };
+
+  const calculateOverallTrend = (trends) => {
+    if (trends.length < 2) return 'stable';
+
+    const firstHalf = trends.slice(0, Math.floor(trends.length / 2));
+    const secondHalf = trends.slice(Math.floor(trends.length / 2));
+
+    const firstAvg = firstHalf.reduce((sum, h) => sum + h.yield, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((sum, h) => sum + h.yield, 0) / secondHalf.length;
+
+    const change = ((secondAvg - firstAvg) / firstAvg) * 100;
+
+    if (change > 5) return 'increasing';
+    if (change < -5) return 'decreasing';
+    return 'stable';
+  };
+
+  // Add useEffect to update predictions
+  useEffect(() => {
+    if (historicalHarvests.length > 0) {
+      // Calculate future yield predictions
+      const futurePredictions = calculateFutureYieldPredictions(historicalHarvests, currentConditions);
+      setFutureYieldPredictions(futurePredictions);
+
+      // Calculate quality grade predictions
+      const qualityPredictions = predictQualityGrades(historicalHarvests, futurePredictions?.[0]);
+      setQualityGradePredictions(qualityPredictions);
+
+      // Generate seasonal forecast
+      const seasonalForecast = generateSeasonalForecast(historicalHarvests, currentConditions);
+      setSeasonalYieldForecast(seasonalForecast);
+
+      // Analyze historical trends
+      const trendAnalysis = analyzeHistoricalTrends(historicalHarvests);
+      setHistoricalTrendAnalysis(trendAnalysis);
+    }
+  }, [historicalHarvests, currentConditions]);
+
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading analytics...</div>;
+  return (
+    <Layout>
+        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8`}>
+          <div className="animate-pulse">
+            <div className={`h-8 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded w-1/4 mb-8`}></div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
+                  <div className={`h-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded w-1/2 mb-4`}></div>
+                  <div className={`h-8 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded w-3/4`}></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
   }
 
   if (error) {
@@ -910,15 +1211,22 @@ const PredictiveAnalytics = () => {
                   <span className={`px-2 py-1 rounded-full text-sm ${
                     isDarkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800'
                   }`}>
-                    {historicalHarvests.length > 0 ? 
-                      `${((historicalHarvests.reduce((sum, h) => sum + (h.coffee_premium_grade || 0), 0) / 
-                      historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0)) * 100).toFixed(1)}%` : 
-                      'No data'
-                    }
+                    {(() => {
+                      if (historicalHarvests.length === 0) return 'No data';
+                      const totalPremium = historicalHarvests.reduce((sum, h) => sum + (h.coffee_premium_grade || 0), 0);
+                      const totalYield = historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
+                      const percentage = totalYield > 0 ? (totalPremium / totalYield * 100).toFixed(1) : '0.0';
+                      return `${percentage}% (${totalPremium.toFixed(1)} kg)`;
+                    })()}
                   </span>
               </div>
                 <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Projected high-quality beans based on current growing conditions
+                  {(() => {
+                    if (historicalHarvests.length === 0) return 'No revenue data available';
+                    const totalPremium = historicalHarvests.reduce((sum, h) => sum + (h.coffee_premium_grade || 0), 0);
+                    const revenue = totalPremium * coffeePrices.premium;
+                    return `Estimated Revenue: ${coffeePrices.currency} ${revenue.toFixed(2)}`;
+                  })()}
             </div>
               </div>
 
@@ -928,15 +1236,22 @@ const PredictiveAnalytics = () => {
                   <span className={`px-2 py-1 rounded-full text-sm ${
                     isDarkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
                   }`}>
-                    {historicalHarvests.length > 0 ? 
-                      `${((historicalHarvests.reduce((sum, h) => sum + (h.coffee_fine_grade || 0), 0) / 
-                      historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0)) * 100).toFixed(1)}%` : 
-                      'No data'
-                    }
+                    {(() => {
+                      if (historicalHarvests.length === 0) return 'No data';
+                      const totalFine = historicalHarvests.reduce((sum, h) => sum + (h.coffee_fine_grade || 0), 0);
+                      const totalYield = historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
+                      const percentage = totalYield > 0 ? (totalFine / totalYield * 100).toFixed(1) : '0.0';
+                      return `${percentage}% (${totalFine.toFixed(1)} kg)`;
+                    })()}
                   </span>
-              </div>
+                </div>
                 <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Expected standard quality beans based on growing patterns
+                  {(() => {
+                    if (historicalHarvests.length === 0) return 'No revenue data available';
+                    const totalFine = historicalHarvests.reduce((sum, h) => sum + (h.coffee_fine_grade || 0), 0);
+                    const revenue = totalFine * coffeePrices.fine;
+                    return `Estimated Revenue: ${coffeePrices.currency} ${revenue.toFixed(2)}`;
+                  })()}
                 </div>
           </div>
 
@@ -946,15 +1261,22 @@ const PredictiveAnalytics = () => {
                   <span className={`px-2 py-1 rounded-full text-sm ${
                     isDarkMode ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800'
                   }`}>
-                    {historicalHarvests.length > 0 ? 
-                      `${((historicalHarvests.reduce((sum, h) => sum + (h.coffee_commercial_grade || 0), 0) / 
-                      historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0)) * 100).toFixed(1)}%` : 
-                      'No data'
-                    }
+                    {(() => {
+                      if (historicalHarvests.length === 0) return 'No data';
+                      const totalCommercial = historicalHarvests.reduce((sum, h) => sum + (h.coffee_commercial_grade || 0), 0);
+                      const totalYield = historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
+                      const percentage = totalYield > 0 ? (totalCommercial / totalYield * 100).toFixed(1) : '0.0';
+                      return `${percentage}% (${totalCommercial.toFixed(1)} kg)`;
+                    })()}
                   </span>
                 </div>
                 <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Predicted basic grade beans based on historical data
+                  {(() => {
+                    if (historicalHarvests.length === 0) return 'No revenue data available';
+                    const totalCommercial = historicalHarvests.reduce((sum, h) => sum + (h.coffee_commercial_grade || 0), 0);
+                    const revenue = totalCommercial * coffeePrices.commercial;
+                    return `Estimated Revenue: ${coffeePrices.currency} ${revenue.toFixed(2)}`;
+                  })()}
               </div>
                 </div>
             </div>
@@ -972,15 +1294,41 @@ const PredictiveAnalytics = () => {
                   <span className={`font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>Peak Season</span>
                 </div>
                 <div className={`text-2xl font-bold mb-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                  {historicalHarvests.length > 0 ? 
-                    `${(historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0) * 1.2).toFixed(1)} kg` : 
-                    'No data'
-                  }
-                </div>
+                  {(() => {
+                    if (historicalHarvests.length === 0) return 'No data';
+                    const totalYield = historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
+                    const peakYield = totalYield * 1.2;
+                    return `${peakYield.toFixed(1)} kg`;
+                  })()}
+              </div>
                 <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                   March - May (Primary Harvest)
-              </div>
             </div>
+                <div className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {(() => {
+                    if (historicalHarvests.length === 0) return '';
+                    const totalYield = historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
+                    const peakYield = totalYield * 1.2;
+                    
+                    // Calculate expected distribution based on historical data
+                    const totalAll = historicalHarvests.reduce((sum, h) => 
+                      sum + (h.coffee_premium_grade || 0) + (h.coffee_fine_grade || 0) + (h.coffee_commercial_grade || 0), 0);
+                    
+                    const premiumRatio = historicalHarvests.reduce((sum, h) => sum + (h.coffee_premium_grade || 0), 0) / (totalAll || 1);
+                    const fineRatio = historicalHarvests.reduce((sum, h) => sum + (h.coffee_fine_grade || 0), 0) / (totalAll || 1);
+                    const commercialRatio = historicalHarvests.reduce((sum, h) => sum + (h.coffee_commercial_grade || 0), 0) / (totalAll || 1);
+                    
+                    // Calculate expected revenue
+                    const expectedRevenue = (
+                      (peakYield * premiumRatio * coffeePrices.premium) +
+                      (peakYield * fineRatio * coffeePrices.fine) +
+                      (peakYield * commercialRatio * coffeePrices.commercial)
+                    );
+                    
+                    return `Expected Raw Coffee Revenue: \n${coffeePrices.currency} ${expectedRevenue.toFixed(2)}`;
+                  })()}
+                </div>
+              </div>
 
               <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
                 <div className="flex items-center gap-2 mb-2">
@@ -988,15 +1336,41 @@ const PredictiveAnalytics = () => {
                   <span className={`font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>Mid Season</span>
                 </div>
                 <div className={`text-2xl font-bold mb-2 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
-                  {historicalHarvests.length > 0 ? 
-                    `${(historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0) * 0.8).toFixed(1)} kg` : 
-                    'No data'
-                  }
-              </div>
+                  {(() => {
+                    if (historicalHarvests.length === 0) return 'No data';
+                    const totalYield = historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
+                    const midYield = totalYield * 0.8;
+                    return `${midYield.toFixed(1)} kg`;
+                  })()}
+                </div>
                 <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                   September - November (Secondary Harvest)
                 </div>
-                </div>
+                <div className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {(() => {
+                    if (historicalHarvests.length === 0) return '';
+                    const totalYield = historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
+                    const midYield = totalYield * 0.8;
+                    
+                    // Calculate expected distribution based on historical data
+                    const totalAll = historicalHarvests.reduce((sum, h) => 
+                      sum + (h.coffee_premium_grade || 0) + (h.coffee_fine_grade || 0) + (h.coffee_commercial_grade || 0), 0);
+                    
+                    const premiumRatio = historicalHarvests.reduce((sum, h) => sum + (h.coffee_premium_grade || 0), 0) / (totalAll || 1);
+                    const fineRatio = historicalHarvests.reduce((sum, h) => sum + (h.coffee_fine_grade || 0), 0) / (totalAll || 1);
+                    const commercialRatio = historicalHarvests.reduce((sum, h) => sum + (h.coffee_commercial_grade || 0), 0) / (totalAll || 1);
+                    
+                    // Calculate expected revenue
+                    const expectedRevenue = (
+                      (midYield * premiumRatio * coffeePrices.premium) +
+                      (midYield * fineRatio * coffeePrices.fine) +
+                      (midYield * commercialRatio * coffeePrices.commercial)
+                    );
+                    
+                    return `Expected Raw Coffee Revenue: \n${coffeePrices.currency} ${expectedRevenue.toFixed(2)}`;
+                  })()}
+              </div>
+            </div>
 
               <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
                 <div className="flex items-center gap-2 mb-2">
@@ -1004,150 +1378,75 @@ const PredictiveAnalytics = () => {
                   <span className={`font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>Off Season</span>
                 </div>
                 <div className={`text-2xl font-bold mb-2 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
-                  {historicalHarvests.length > 0 ? 
-                    `${(historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0) * 0.4).toFixed(1)} kg` : 
-                    'No data'
-                  }
-                </div>
+                  {(() => {
+                    if (historicalHarvests.length === 0) return 'No data';
+                    const totalYield = historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
+                    const offYield = totalYield * 0.4;
+                    return `${offYield.toFixed(1)} kg`;
+                  })()}
+              </div>
                 <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                   December - February & June - August
                 </div>
-              </div>
-              </div>
-            </div>
-
-          {/* Quality Improvement Recommendations */}
-          <div className="mt-8">
-            <h3 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-              Quality Improvement Insights
-            </h3>
-            <div className="space-y-3">
-              <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                <div className={`font-medium mb-2 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                  Premium Grade Optimization
-                </div>
-                <ul className={`list-disc list-inside text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  <li>Maintain optimal soil pH between 6.0-6.5</li>
-                  <li>Ensure consistent irrigation during critical growth phases</li>
-                  <li>Implement selective harvesting for ripe cherries</li>
-                </ul>
-              </div>
-
-              <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                <div className={`font-medium mb-2 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                  Seasonal Adjustments
-                </div>
-                <ul className={`list-disc list-inside text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  <li>Adjust irrigation based on seasonal rainfall patterns</li>
-                  <li>Modify fertilization schedule for each growing season</li>
-                  <li>Implement additional shade during peak dry seasons</li>
-                </ul>
+                <div className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {(() => {
+                    if (historicalHarvests.length === 0) return '';
+                    const totalYield = historicalHarvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
+                    const offYield = totalYield * 0.4;
+                    
+                    // Calculate expected distribution based on historical data
+                    const totalAll = historicalHarvests.reduce((sum, h) => 
+                      sum + (h.coffee_premium_grade || 0) + (h.coffee_fine_grade || 0) + (h.coffee_commercial_grade || 0), 0);
+                    
+                    const premiumRatio = historicalHarvests.reduce((sum, h) => sum + (h.coffee_premium_grade || 0), 0) / (totalAll || 1);
+                    const fineRatio = historicalHarvests.reduce((sum, h) => sum + (h.coffee_fine_grade || 0), 0) / (totalAll || 1);
+                    const commercialRatio = historicalHarvests.reduce((sum, h) => sum + (h.coffee_commercial_grade || 0), 0) / (totalAll || 1);
+                    
+                    // Calculate expected revenue
+                    const expectedRevenue = (
+                      (offYield * premiumRatio * coffeePrices.premium) +
+                      (offYield * fineRatio * coffeePrices.fine) +
+                      (offYield * commercialRatio * coffeePrices.commercial)
+                    );
+                    
+                    return `Expected Raw Coffee Revenue: \n${coffeePrices.currency} ${expectedRevenue.toFixed(2)}`;
+                  })()}
                 </div>
               </div>
             </div>
           </div>
-
-                {/* Environmental Inputs */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          <div className={`p-4 rounded-lg shadow ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-            <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Soil pH</label>
-            <input
-              type="number"
-              name="pH"
-              value={currentConditions.pH}
-              onChange={handleInputChange}
-              className={`mt-1 block w-full rounded-md shadow-sm ${
-                isDarkMode
-                  ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500 focus:ring-blue-500' 
-                  : 'bg-white border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-blue-600'
-              }`}
-              step="0.1"
-              min="0"
-              max="14"
-            />
-              </div>
-          <div className={`p-4 rounded-lg shadow ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-            <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Moisture Level</label>
-            <select
-              name="moisture"
-              value={currentConditions.moisture}
-              onChange={handleInputChange}
-              className={`mt-1 block w-full rounded-md shadow-sm ${
-                isDarkMode 
-                  ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500 focus:ring-blue-500' 
-                  : 'bg-white border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-blue-600'
-              }`}
-            >
-              <option value="very_dry">Very Dry</option>
-              <option value="dry">Dry</option>
-              <option value="moderate">Moderate</option>
-              <option value="moist">Moist</option>
-              <option value="very_moist">Very Moist</option>
-            </select>
           </div>
-          <div className={`p-4 rounded-lg shadow ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-            <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Last Fertilized</label>
-            <input
-              type="date"
-              name="lastFertilized"
-              value={currentConditions.lastFertilized}
-              onChange={handleInputChange}
-              className={`mt-1 block w-full rounded-md shadow-sm ${
-                isDarkMode 
-                  ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500 focus:ring-blue-500' 
-                  : 'bg-white border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-blue-600'
-              }`}
-            />
-          </div>
-                </div>
 
-        {/* ML Insights Component */}
-        {mlAnalysis && historicalHarvests.length > 0 && (
-          <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-lg mb-8`}>
-            <MLInsights
-              environmentalData={plantStatuses.map(status => ({
-                timestamp: status.timestamp,
-                temperature: safeParseFloat(status.temperature, 25),
-                humidity: safeParseFloat(status.humidity, 70),
-                pH: safeParseFloat(status.soil_ph, 6.5)
-              }))}
-              growthData={historicalHarvests.map(h => ({
-                value: safeParseFloat(h.coffee_raw_quantity, 0),
-                timestamp: new Date(h.harvest_date)
-              }))}
-            />
+        {/* Future Yield Predictions */}
+        <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-lg mb-8`}>
+          <h2 className={`text-2xl font-bold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            Future Yield Predictions
+          </h2>
+          {futureYieldPredictions && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {futureYieldPredictions.map((prediction, index) => (
+                <div key={index} className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                      Harvest {index + 1}
+                    </span>
+                    <span className={`px-2 py-1 rounded-full text-sm ${
+                      isDarkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {prediction.toFixed(1)} kg
+                    </span>
                   </div>
-                )}
-        {mlAnalysis && historicalHarvests.length === 0 && (
-          <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-lg mb-8`}>
-            <div className="text-center py-8">
-              <h3 className={`text-xl font-semibold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                No Growth Forecast Available
-              </h3>
-              <p className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                Growth forecast requires harvest data. Please record some harvests to see predictions and insights.
-              </p>
-              </div>
+                  {qualityGradePredictions && (
+                    <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      <div>Premium: {(prediction * (qualityGradePredictions.premium / prediction)).toFixed(1)} kg</div>
+                      <div>Fine: {(prediction * (qualityGradePredictions.fine / prediction)).toFixed(1)} kg</div>
+                      <div>Commercial: {(prediction * (qualityGradePredictions.commercial / prediction)).toFixed(1)} kg</div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
-
-        {/* Plant Sub-Analytics Section */}
-        <div className="mt-8">
-          <h2 className={`text-xl font-semibold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                Individual Plant Analytics
-          </h2>
-          <div className="space-y-6">
-                  {plants.map(plant => (
-              <PlantSubAnalytics
-                      key={plant.plant_id}
-                plant={plant}
-                historicalHarvests={historicalHarvests}
-                plantStatuses={plantStatuses}
-                weatherForecast={weatherForecast}
-                isDarkMode={isDarkMode}
-              />
-            ))}
-            </div>
         </div>
 
         {/* Additional Analytics */}
@@ -1156,7 +1455,7 @@ const PredictiveAnalytics = () => {
           <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
             <h2 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Historical Trends</h2>
             {historicalHarvests.length > 0 && (
-                <Line
+              <Line
                 data={{
                   labels: historicalHarvests.map(h => new Date(h.harvest_date).toLocaleDateString()),
                   datasets: [{
@@ -1166,8 +1465,8 @@ const PredictiveAnalytics = () => {
                     backgroundColor: isDarkMode ? 'rgba(147, 197, 253, 0.2)' : 'rgba(59, 130, 246, 0.2)',
                   }]
                 }}
-                  options={{
-                    responsive: true,
+                options={{
+                  responsive: true,
                   plugins: {
                     legend: {
                       position: 'top',
@@ -1181,26 +1480,26 @@ const PredictiveAnalytics = () => {
                       color: isDarkMode ? '#fff' : '#1f2937'
                     }
                   },
-                    scales: {
-                      x: {
-                        grid: {
+                  scales: {
+                    x: {
+                      grid: {
                         color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
-                        },
-                        ticks: {
-                        color: isDarkMode ? '#fff' : '#1f2937'
-                        }
                       },
-                    y: {
-                        grid: {
-                        color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
-                        },
-                        ticks: {
+                      ticks: {
                         color: isDarkMode ? '#fff' : '#1f2937'
-                        }
+                      }
+                    },
+                    y: {
+                      grid: {
+                        color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+                      },
+                      ticks: {
+                        color: isDarkMode ? '#fff' : '#1f2937'
                       }
                     }
-                  }}
-                />
+                  }
+                }}
+              />
             )}
           </div>
 
@@ -1222,13 +1521,103 @@ const PredictiveAnalytics = () => {
                       }`}>
                         {safeParseFloat(data.value, 0)}{data.unit} ({data.status})
                       </span>
-                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Historical Trend Analysis */}
+        {historicalTrendAnalysis && (
+          <div className={`mt-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-lg mb-8`}>
+            <h2 className={`text-2xl font-bold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              Historical Trend Analysis
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                  Yield Trends
+                </h3>
+                <Line
+                  data={{
+                    labels: historicalTrendAnalysis.yieldTrends.map(t => t.date.toLocaleDateString()),
+                    datasets: [
+                      {
+                        label: 'Actual Yield',
+                        data: historicalTrendAnalysis.yieldTrends.map(t => t.yield),
+                        borderColor: isDarkMode ? 'rgba(147, 197, 253, 1)' : 'rgba(59, 130, 246, 1)',
+                        backgroundColor: isDarkMode ? 'rgba(147, 197, 253, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                      },
+                      {
+                        label: 'Moving Average',
+                        data: historicalTrendAnalysis.movingAverages.map(m => m.average),
+                        borderColor: isDarkMode ? 'rgba(16, 185, 129, 1)' : 'rgba(5, 150, 105, 1)',
+                        backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.2)' : 'rgba(5, 150, 105, 0.2)',
+                      }
+                    ]
+                  }}
+                  options={{
+                    responsive: true,
+                    plugins: {
+                      legend: {
+                        position: 'top',
+                        labels: {
+                          color: isDarkMode ? '#fff' : '#1f2937'
+                        }
+                      }
+                    },
+                    scales: {
+                      x: {
+                        grid: {
+                          color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+                        },
+                        ticks: {
+                          color: isDarkMode ? '#fff' : '#1f2937'
+                        }
+                      },
+                      y: {
+                        grid: {
+                          color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+                        },
+                        ticks: {
+                          color: isDarkMode ? '#fff' : '#1f2937'
+                        }
+                      }
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                  Overall Trend Analysis
+                </h3>
+                <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className={`font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                      Current Trend
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      historicalTrendAnalysis.overallTrend === 'increasing'
+                        ? isDarkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800'
+                        : historicalTrendAnalysis.overallTrend === 'decreasing'
+                        ? isDarkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800'
+                        : isDarkMode ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {historicalTrendAnalysis.overallTrend.charAt(0).toUpperCase() + 
+                       historicalTrendAnalysis.overallTrend.slice(1)}
+                    </span>
+                  </div>
+                  <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    <p>Based on {historicalTrendAnalysis.yieldTrends.length} harvest records</p>
+                    <p>Moving average window: 3 harvests</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

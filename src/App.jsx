@@ -14,7 +14,6 @@ import DSSRecommendations from "./pages/DSSRecommendations";
 import FarmerRecommendations from "./pages/FarmerRecommendations";
 import { AuthProvider } from "./lib/AuthProvider"; // Keep AuthProvider
 import ProtectedRoute from "./lib/ProtectedRoute"; // Keep ProtectedRoute for other routes
-import CoffeeGrader from "./pages/CoffeeGrader";
 import LandDeclaration from "./pages/LandDeclaration";
 import HarvestReporting from "./pages/HarvestReporting";
 import FarmerReports from "./pages/FarmerReports";
@@ -24,6 +23,7 @@ import { ThemeProvider } from './lib/ThemeContext';
 import './styles/landing.css';
 import PlantStatus from "./pages/PlantStatus";
 import FarmerProfile from "./pages/FarmerProfile";
+import RevenueForecast from "./pages/RevenueForecast";
 
 function App() {
   return (
@@ -114,14 +114,6 @@ function App() {
               }
             />
             <Route
-              path="/coffee-grader"
-              element={
-                <ProtectedRoute requiredRoles={['farmer', 'admin']}>
-                  <CoffeeGrader />
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/harvest-reporting"
               element={
                 <ProtectedRoute requiredRoles={['farmer', 'admin']}> {/* Changed to allow admin too, as they might want to see it */}
@@ -168,6 +160,15 @@ function App() {
               element={
                 <ProtectedRoute requiredRoles={['admin']}>
                   <FarmerProfile />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/revenue-forecast"
+              element={
+                <ProtectedRoute requiredRoles={['farmer', 'admin']}>
+                  <RevenueForecast />
                 </ProtectedRoute>
               }
             />

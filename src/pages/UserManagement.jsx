@@ -219,38 +219,18 @@ const UserManagement = () => {
   const handleDeleteUser = async (id) => {
     if (window.confirm("Are you sure you want to delete this user? This action cannot be undone.")) {
       try {
-        // Fetch user email to delete from auth.users (if needed for cascade)
-        const { data: userToDelete, error: fetchError } = await supabase
-          .from('users')
-          .select('email')
-          .eq('id', id)
-          .single();
-
-        if (fetchError) {
-          throw new Error('Could not find user to delete.');
-        }
-
-        // Delete from your 'users' table first
+        // First delete from your 'users' table
         const { error: deleteUserError } = await supabase.from("users").delete().eq("id", id);
         if (deleteUserError) {
           throw deleteUserError;
         }
 
-        // Optional: If you want to delete from Supabase Auth users as well (requires admin role and service_role key)
-        // This part needs to be handled carefully and typically done via a Supabase Function or on the server side
-        // to use the service_role key, as it's not safe to expose it client-side.
-        // For client-side, you typically only delete from your custom 'users' table.
-        // If your 'users' table has a foreign key constraint with cascade delete to auth.users, it would happen automatically.
-        // If not, you'd need a server-side function or careful manual deletion in Supabase Auth.
-        // For demonstration, we'll assume a client-side deletion only from your 'users' table is sufficient
-        // or that you have a database trigger/function handling auth.users deletion.
-
-        const { error: deleteAuthError } = await supabase.auth.admin.deleteUser(userToDelete.email);
+        // Then delete from Supabase Auth using the user's UUID
+        const { error: deleteAuthError } = await supabase.auth.admin.deleteUser(id);
         if (deleteAuthError) {
-          console.warn("Could not delete user from Supabase Auth (might require service_role key or specific policies):", deleteAuthError.message);
-          // Don't throw, as the record from your 'users' table is already deleted.
+          console.warn("Could not delete user from Supabase Auth:", deleteAuthError.message);
+          // Don't throw, as the record from your 'users' table is already deleted
         }
-
 
         alert("User deleted successfully!");
         fetchAllUsers(); // Re-fetch all users to update the table
@@ -323,7 +303,7 @@ const UserManagement = () => {
               value={searchQuery}
               onChange={setSearchQuery}
               options={searchSuggestions}
-              placeholder="Search users..."
+                placeholder="Search users..."
               label=""
               isDarkMode={isDarkMode}
               icon={
@@ -400,20 +380,10 @@ const UserManagement = () => {
                   <div className={`pt-3 mt-3 border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
                     <div className="flex justify-end space-x-3">
                       <button
-                        onClick={() => handleEditUser(user)}
-                        className={`flex items-center px-3 py-1.5 rounded-lg text-sm transition-colors
-                          ${isDarkMode
-                            ? 'bg-gray-600 text-white hover:bg-gray-500'
-                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'}`}
-                      >
-                        <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteUser(user.id);
+                        }}
                         className={`flex items-center px-3 py-1.5 rounded-lg text-sm transition-colors
                           ${isDarkMode
                             ? 'bg-red-900 text-white hover:bg-red-800'

@@ -10,7 +10,7 @@ const Layout = ({ children }) => {
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} flex`}>
       <Navbar />
-      <div className="flex-1 p-8">
+      <div className="flex-1 p-8 ml-64">
         {children}
       </div>
       <ToastContainer position="bottom-right" theme={isDarkMode ? "dark" : "light"} />

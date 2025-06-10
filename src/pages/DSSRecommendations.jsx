@@ -39,6 +39,7 @@ const DSSRecommendations = () => {
   const [gradeDistribution, setGradeDistribution] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [selectedPlant, setSelectedPlant] = useState(null);
+  const [harvests, setHarvests] = useState([]);
 
   // DSS Input States
   const [soilType, setSoilType] = useState("");
@@ -59,6 +60,10 @@ const DSSRecommendations = () => {
     diseaseHistory: [],
     weatherForecast: null
   });
+
+  // Add after the existing state declarations
+  const [seasonalRecommendations, setSeasonalRecommendations] = useState([]);
+  const [bestPractices, setBestPractices] = useState([]);
 
   // Fetch user and plants
   useEffect(() => {
@@ -91,19 +96,20 @@ const DSSRecommendations = () => {
       if (!plantError && plantData) setPlants(plantData);
 
       // Fetch harvest data
-      const { data: harvests, error: harvestError } = await supabase
+      const { data: harvestData, error: harvestError } = await supabase
         .from('harvest_data')
         .select('*')
         .eq('farmer_id', authUser.id);
 
-      if (!harvestError && harvests) {
+      if (!harvestError && harvestData) {
+        setHarvests(harvestData);
         // Calculate yield statistics
         const totalTrees = plantData.reduce((sum, p) => sum + (p.number_of_tree_planted || 0), 0);
-        const totalRawYield = harvests.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
-        const totalDryYield = harvests.reduce((sum, h) => sum + (h.coffee_dry_quantity || 0), 0);
-        const premiumGrade = harvests.reduce((sum, h) => sum + (h.coffee_premium_grade || 0), 0);
-        const fineGrade = harvests.reduce((sum, h) => sum + (h.coffee_fine_grade || 0), 0);
-        const commercialGrade = harvests.reduce((sum, h) => sum + (h.coffee_commercial_grade || 0), 0);
+        const totalRawYield = harvestData.reduce((sum, h) => sum + (h.coffee_raw_quantity || 0), 0);
+        const totalDryYield = harvestData.reduce((sum, h) => sum + (h.coffee_dry_quantity || 0), 0);
+        const premiumGrade = harvestData.reduce((sum, h) => sum + (h.coffee_premium_grade || 0), 0);
+        const fineGrade = harvestData.reduce((sum, h) => sum + (h.coffee_fine_grade || 0), 0);
+        const commercialGrade = harvestData.reduce((sum, h) => sum + (h.coffee_commercial_grade || 0), 0);
 
         // Calculate averages and percentages
         const yieldPerTree = totalTrees > 0 ? totalDryYield / totalTrees : 0;
@@ -115,7 +121,7 @@ const DSSRecommendations = () => {
           totalTrees,
           yieldPerTree,
           premiumPercentage,
-          harvestCount: harvests.length,
+          harvestCount: harvestData.length,
           totalDryYield
         });
 
@@ -142,7 +148,7 @@ const DSSRecommendations = () => {
           totalTrees,
           farmSize: farmerDetails?.farm_size,
           elevation: farmerDetails?.farm_elevation,
-          harvestCount: harvests.length,
+          harvestCount: harvestData.length,
           totalDryYield
         });
 
@@ -647,6 +653,185 @@ const DSSRecommendations = () => {
     navigate(`/plant-status/${plant.plant_id}`);
   };
 
+  // Add after fetchFarmerData function
+  const generateSeasonalRecommendations = (plantData, harvestData, plantStatus) => {
+    const currentMonth = new Date().getMonth();
+    const recommendations = [];
+
+    // Seasonal recommendations based on month
+    if (currentMonth >= 2 && currentMonth <= 4) { // March-May (Peak Season)
+      recommendations.push({
+        type: 'seasonal',
+        priority: 'high',
+        message: 'Peak harvest season - Focus on proper harvesting techniques and post-harvest processing',
+        details: [
+          'Harvest only ripe cherries',
+          'Maintain proper drying conditions',
+          'Monitor moisture content during processing'
+        ]
+      });
+    } else if (currentMonth >= 5 && currentMonth <= 7) { // June-August (Post-Harvest)
+      recommendations.push({
+        type: 'seasonal',
+        priority: 'medium',
+        message: 'Post-harvest maintenance period',
+        details: [
+          'Prune trees to remove dead branches',
+          'Apply balanced fertilizer',
+          'Monitor for pest infestations'
+        ]
+      });
+    } else if (currentMonth >= 8 && currentMonth <= 10) { // September-November (Pre-Harvest)
+      recommendations.push({
+        type: 'seasonal',
+        priority: 'high',
+        message: 'Pre-harvest preparation',
+        details: [
+          'Monitor cherry development',
+          'Prepare processing equipment',
+          'Plan harvest schedule'
+        ]
+      });
+    } else { // December-February (Off-Season)
+      recommendations.push({
+        type: 'seasonal',
+        priority: 'medium',
+        message: 'Off-season maintenance',
+        details: [
+          'Focus on soil management',
+          'Implement water conservation measures',
+          'Plan for next season\'s activities'
+        ]
+      });
+    }
+
+    // Add recommendations based on plant status
+    if (plantStatus) {
+      if (plantStatus.soil_ph < 5.5 || plantStatus.soil_ph > 6.5) {
+        recommendations.push({
+          type: 'soil',
+          priority: 'high',
+          message: 'Soil pH needs adjustment',
+          details: [
+            `Current pH: ${plantStatus.soil_ph}`,
+            'Apply appropriate soil amendments',
+            'Monitor pH changes after application'
+          ]
+        });
+      }
+
+      if (plantStatus.moisture_level === 'dry') {
+        recommendations.push({
+          type: 'irrigation',
+          priority: 'high',
+          message: 'Irrigation needed',
+          details: [
+            'Implement regular watering schedule',
+            'Consider mulching to retain moisture',
+            'Monitor soil moisture levels'
+          ]
+        });
+      }
+
+      if (plantStatus.status === 'diseased') {
+        recommendations.push({
+          type: 'health',
+          priority: 'critical',
+          message: 'Disease management required',
+          details: [
+            'Identify specific disease symptoms',
+            'Apply appropriate treatment',
+            'Implement preventive measures'
+          ]
+        });
+      }
+    }
+
+    // Add recommendations based on harvest data
+    if (harvestData && harvestData.length > 0) {
+      const recentHarvests = harvestData.slice(-3);
+      const avgYield = recentHarvests.reduce((sum, h) => sum + h.coffee_dry_quantity, 0) / recentHarvests.length;
+      const avgPremium = recentHarvests.reduce((sum, h) => sum + h.coffee_premium_grade, 0) / recentHarvests.length;
+
+      if (avgPremium / avgYield < 0.3) {
+        recommendations.push({
+          type: 'quality',
+          priority: 'medium',
+          message: 'Quality improvement needed',
+          details: [
+            'Review harvesting techniques',
+            'Improve post-harvest processing',
+            'Consider selective picking'
+          ]
+        });
+      }
+    }
+
+    return recommendations;
+  };
+
+  const generateBestPractices = (plantData, harvestData) => {
+    const practices = [];
+
+    // General best practices
+    practices.push({
+      category: 'Planting',
+      practices: [
+        'Maintain proper spacing between trees (2-3 meters)',
+        'Plant in well-draining soil',
+        'Provide adequate shade for young plants'
+      ]
+    });
+
+    practices.push({
+      category: 'Maintenance',
+      practices: [
+        'Regular pruning to maintain tree shape',
+        'Annual soil testing and amendment',
+        'Proper weed management',
+        'Regular pest and disease monitoring'
+      ]
+    });
+
+    practices.push({
+      category: 'Harvesting',
+      practices: [
+        'Selective picking of ripe cherries',
+        'Proper sorting of harvested cherries',
+        'Maintain clean processing equipment',
+        'Monitor moisture content during drying'
+      ]
+    });
+
+    // Add specific practices based on coffee variety
+    if (plantData && plantData.length > 0) {
+      const varieties = [...new Set(plantData.map(p => p.coffee_variety))];
+      varieties.forEach(variety => {
+        practices.push({
+          category: `${variety} Specific`,
+          practices: [
+            'Follow variety-specific pruning techniques',
+            'Monitor for variety-specific diseases',
+            'Adjust fertilization based on variety requirements'
+          ]
+        });
+      });
+    }
+
+    return practices;
+  };
+
+  // Update the useEffect for seasonal recommendations
+  useEffect(() => {
+    if (plants && harvests && Object.keys(statuses).length > 0) {
+      const seasonalRecs = generateSeasonalRecommendations(plants, harvests, statuses[plants[0].plant_id]);
+      setSeasonalRecommendations(seasonalRecs);
+      
+      const practices = generateBestPractices(plants, harvests);
+      setBestPractices(practices);
+    }
+  }, [plants, harvests, statuses]);
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -719,8 +904,6 @@ const DSSRecommendations = () => {
                 </div>
               </div>
             )}
-
-
 
             {/* Grade Distribution and Recommendations */}
             {gradeDistribution && (
@@ -837,8 +1020,136 @@ const DSSRecommendations = () => {
               </div>
             )}
 
+
+
+            {/* Seasonal Recommendations */}
+            <div className="mt-8">
+              <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                    Seasonal Recommendations
+                  </h3>
+                  <div className={`px-4 py-2 rounded-full text-sm font-medium ${
+                    isDarkMode ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-700'
+                  }`}>
+                    {new Date().toLocaleString('default', { month: 'long' })} {new Date().getFullYear()}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {seasonalRecommendations.map((rec, index) => (
+                    <div key={index} className={`p-6 rounded-lg border-l-4 transition-all duration-200 hover:shadow-lg ${
+                      rec.priority === 'critical' 
+                        ? isDarkMode 
+                          ? 'bg-red-900/20 border-red-500 hover:bg-red-900/30' 
+                          : 'bg-red-50 border-red-500 hover:bg-red-100'
+                        : rec.priority === 'high'
+                        ? isDarkMode
+                          ? 'bg-yellow-900/20 border-yellow-500 hover:bg-yellow-900/30'
+                          : 'bg-yellow-50 border-yellow-500 hover:bg-yellow-100'
+                        : isDarkMode
+                          ? 'bg-blue-900/20 border-blue-500 hover:bg-blue-900/30'
+                          : 'bg-blue-50 border-blue-500 hover:bg-blue-100'
+                    }`}>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className={`p-2 rounded-full ${
+                          rec.priority === 'critical'
+                            ? isDarkMode ? 'bg-red-900/50' : 'bg-red-100'
+                            : rec.priority === 'high'
+                            ? isDarkMode ? 'bg-yellow-900/50' : 'bg-yellow-100'
+                            : isDarkMode ? 'bg-blue-900/50' : 'bg-blue-100'
+                        }`}>
+                          {rec.priority === 'critical' ? (
+                            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                          ) : rec.priority === 'high' ? (
+                            <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className={`font-semibold text-lg ${
+                          isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`}>
+                          {rec.message}
+                        </span>
+                      </div>
+                      <ul className="space-y-2">
+                        {rec.details.map((detail, i) => (
+                          <li key={i} className={`flex items-start gap-2 ${
+                            isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                          }`}>
+                            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                            <span>{detail}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Best Practices */}
+            <div className="mt-8">
+              <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                <h3 className={`text-2xl font-bold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  Best Practices
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {bestPractices.map((category, index) => (
+                    <div key={index} className={`p-6 rounded-lg transition-all duration-200 hover:shadow-lg ${
+                      isDarkMode ? 'bg-gray-700/50 hover:bg-gray-700' : 'bg-gray-50 hover:bg-gray-100'
+                    }`}>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className={`p-2 rounded-full ${
+                          isDarkMode ? 'bg-indigo-900/50' : 'bg-indigo-100'
+                        }`}>
+                          {category.category === 'Planting' ? (
+                            <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                          ) : category.category === 'Maintenance' ? (
+                            <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                          )}
+                        </div>
+                        <h4 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {category.category}
+                        </h4>
+                      </div>
+                      <ul className="space-y-3">
+                        {category.practices.map((practice, i) => (
+                          <li key={i} className={`flex items-start gap-2 ${
+                            isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                          }`}>
+                            <svg className="w-5 h-5 mt-0.5 flex-shrink-0 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>{practice}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
             {/* Plants Section */}
-            <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
+            <div className={`mt-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
               <h3 className={`text-2xl font-semibold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                 Your Current Plants
               </h3>
@@ -895,6 +1206,8 @@ const DSSRecommendations = () => {
                 </div>
               )}
             </div>
+
+
           </>
         )}
       </div>

@@ -76,30 +76,30 @@ const PlantStatus = () => {
       const { error } = await supabase
         .from('plant_status')
         .insert([
-          {
-            plant_id: plantId,
-            status: form.status,
-            age_stage: form.age_stage,
-            soil_ph: form.soil_ph,
-            moisture_level: form.moisture_level,
-            last_fertilized: form.last_fertilized
-          }
-        ]);
+      {
+        plant_id: plantId,
+        status: form.status,
+        age_stage: form.age_stage,
+        soil_ph: form.soil_ph,
+        moisture_level: form.moisture_level,
+        last_fertilized: form.last_fertilized
+      }
+    ]);
 
       if (error) throw error;
       
-      setSuccessMsg("Status updated successfully!");
+    setSuccessMsg("Status updated successfully!");
       
       // Refetch status
-      const { data: statusData } = await supabase
-        .from('plant_status')
-        .select('*')
-        .eq('plant_id', plantId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+    const { data: statusData } = await supabase
+      .from('plant_status')
+      .select('*')
+      .eq('plant_id', plantId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
         
-      setStatus(statusData);
+    setStatus(statusData);
     } catch (error) {
       console.error('Error updating status:', error);
       setErrorMsg(error.message || "Failed to save. Please try again.");

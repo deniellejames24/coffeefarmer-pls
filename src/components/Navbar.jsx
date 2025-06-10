@@ -16,6 +16,7 @@ const Navbar = () => {
     { name: "Analytics", path: "/admin-analytics" },
     { name: "DSS Insights", path: "/farmer-recommendations" },
     { name: "Farmer Report", path: "/farmer-reports" },
+    { name: "Revenue Forecast", path: "/revenue-forecast" },
   ];
 
   const farmerLinks = [
@@ -25,6 +26,7 @@ const Navbar = () => {
     { name: "DSS Recommendations", path: "/dss-recommendations" },
     { name: "Land & Plant Declaration", path: "/land-declaration" },
     { name: "Harvest Reporting", path: "/harvest-reporting" },
+    { name: "Revenue Forecast", path: "/revenue-forecast" },
   ];
 
   const navLinks = user?.role === 'admin' ? adminLinks : farmerLinks;
@@ -40,7 +42,7 @@ const Navbar = () => {
   };
 
   return (
-    <div className={`w-64 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg relative`}>
+    <div className={`fixed top-0 left-0 h-screen w-64 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg flex flex-col`}>
       <div className={`p-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -65,7 +67,7 @@ const Navbar = () => {
           </button>
         </div>
       </div>
-      <nav className="p-4">
+      <nav className="flex-1 p-4 overflow-y-auto">
         <ul className="space-y-2">
           {navLinks.map((link) => (
             <li key={link.path}>
@@ -87,7 +89,7 @@ const Navbar = () => {
           ))}
         </ul>
       </nav>
-      <div className={`sticky bottom-0 w-full p-4 border-t ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
+      <div className={`w-full p-4 border-t ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
         <button
           onClick={handleLogout}
           className={`w-full px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${

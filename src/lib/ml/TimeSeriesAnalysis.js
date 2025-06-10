@@ -190,4 +190,70 @@ export class TimeSeriesAnalysis {
 
         return stats;
     }
+
+    // Predict next value based on recent trend
+    predictNextValue() {
+        if (this.data.length < 2) return null;
+
+        // Get recent data points
+        const recentData = this.data.slice(-7); // Use last 7 data points
+        const values = recentData.map(d => d.value);
+        
+        // Calculate simple moving average
+        const sma = values.reduce((sum, val) => sum + val, 0) / values.length;
+        
+        // Calculate trend
+        const trend = this.calculateTrend(recentData);
+        
+        // Predict next value
+        return Math.max(0, sma * (1 + trend));
+    }
+
+    // Predict next seasonal value
+    predictNextSeasonalValue() {
+        if (this.data.length < 2) return null;
+
+        const currentSeason = this.getTropicalSeason(new Date());
+        const seasonalData = this.data.filter(d => 
+            this.getTropicalSeason(d.timestamp) === currentSeason
+        );
+
+        if (seasonalData.length === 0) return this.predictNextValue();
+
+        // Calculate seasonal average
+        const seasonalAvg = seasonalData.reduce((sum, d) => sum + d.value, 0) / seasonalData.length;
+        
+        // Get seasonal pattern
+        const pattern = this.seasonalPatterns[currentSeason];
+        
+        // Apply seasonal weight
+        return Math.max(0, seasonalAvg * pattern.weight);
+    }
+
+    // Calculate trend from data points
+    calculateTrend(dataPoints) {
+        if (dataPoints.length < 2) return 0;
+
+        const values = dataPoints.map(d => d.value);
+        const n = values.length;
+        
+        // Calculate simple linear regression
+        let sumX = 0;
+        let sumY = 0;
+        let sumXY = 0;
+        let sumXX = 0;
+
+        values.forEach((y, x) => {
+            sumX += x;
+            sumY += y;
+            sumXY += x * y;
+            sumXX += x * x;
+        });
+
+        const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+        
+        // Normalize trend to percentage
+        const avgY = sumY / n;
+        return slope / avgY;
+    }
 } 
