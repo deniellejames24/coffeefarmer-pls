@@ -19,7 +19,8 @@ const PasswordInput = ({ value, onChange, placeholder, id, name, className = '' 
       />
       <button
         type="button"
-        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600"
+        className="absolute right-3 top-1/2 -translate-y-1/2 m-0 p-0 bg-transparent border-none shadow-none outline-none text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600"
+        style={{ boxShadow: 'none', background: 'none', border: 'none' }}
         onClick={() => setShowPassword(!showPassword)}
         aria-label={showPassword ? 'Hide password' : 'Show password'}
       >

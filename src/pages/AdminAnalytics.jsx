@@ -16,6 +16,11 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
+import PredictResult from '../components/analytics/PredictResult';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import CoffeeSampleGrading from './CoffeeSampleGrading';
+import AdminDSS from '../components/analytics/AdminDSS';
 
 // Register Chart.js components
 ChartJS.register(
@@ -41,6 +46,7 @@ const AdminAnalytics = () => {
   const [activeFarmers, setActiveFarmers] = useState(0);
   const [averageYieldPerFarmer, setAverageYieldPerFarmer] = useState(0);
   const [topPerformingFarmers, setTopPerformingFarmers] = useState([]);
+  const [dssRecommendations, setDssRecommendations] = useState([]);
 
   // Chart data states
   const [yearlyProductivity, setYearlyProductivity] = useState({
@@ -83,11 +89,78 @@ const AdminAnalytics = () => {
     expectedYield: 0,
     growthRate: 0,
     performanceCategories: {
-      high: 0,
-      average: 0,
-      needsSupport: 0
+      high: { count: 0, farmers: [] },
+      average: { count: 0, farmers: [] },
+      needsSupport: { count: 0, farmers: [] }
     }
   });
+
+  const [expandedCategories, setExpandedCategories] = useState({
+    high: false,
+    average: false,
+    needsSupport: false
+  });
+
+  // Add state for prediction form and result
+  const [inputData, setInputData] = useState(null);
+  const [form, setForm] = useState({
+    moisture: '',
+    ph: '',
+    odor_score: '',
+    defect_count: ''
+  });
+
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setInputData(form);
+  };
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+
+    // Title
+    doc.setFontSize(18);
+    doc.text('Land & Plant Declaration', 14, 18);
+
+    // Date
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 26);
+
+    // Farm Details Section
+    doc.setFontSize(14);
+    doc.text('Farm Details', 14, 36);
+    doc.setFontSize(11);
+    doc.text(`Location: ${farmerDetails.farm_location || '-'}`, 14, 44);
+    doc.text(`Size: ${farmerDetails.farm_size || '-'} hectares`, 14, 52);
+    doc.text(`Elevation: ${farmerDetails.farm_elevation || '-'} meters`, 14, 60);
+
+    // Plant Data Table
+    if (plantDataList.length > 0) {
+      doc.setFontSize(14);
+      doc.text('Coffee Plants', 14, 72);
+
+      doc.autoTable({
+        startY: 76,
+        head: [['Variety', 'Planting Date', 'Number of Trees']],
+        body: plantDataList.map(plant => [
+          plant.coffee_variety,
+          plant.planting_date ? new Date(plant.planting_date).toLocaleDateString() : '',
+          plant.number_of_tree_planted
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [34, 197, 94] }, // Tailwind green-600
+      });
+    }
+
+    // Save the PDF
+    doc.save('Land_Plant_Declaration.pdf');
+  };
+
+  const [farmersData, setFarmersData] = useState([]);
 
   useEffect(() => {
     const fetchFarmerAnalytics = async () => {
@@ -96,7 +169,7 @@ const AdminAnalytics = () => {
         
         // Fetch data in parallel
         const [
-          farmersData,
+          farmersDataResp,
           harvestData,
           plantData
         ] = await Promise.all([
@@ -139,15 +212,16 @@ const AdminAnalytics = () => {
           // Plant data for all farmers
           supabase
             .from('plant_data')
-            .select('farmer_id, number_of_tree_planted')
+            .select('farmer_id, number_of_tree_planted, elevation, cluster_size')
         ]);
 
-        if (farmersData.error || harvestData.error || plantData.error) {
+        if (farmersDataResp.error || harvestData.error || plantData.error) {
           throw new Error('Error fetching farmer data');
         }
 
+        setFarmersData(farmersDataResp.data);
         // Process basic farmer metrics
-        setTotalFarmers(farmersData.data.length);
+        setTotalFarmers(farmersDataResp.data.length);
         
         // Calculate active farmers (those with harvests in the last 6 months)
         const sixMonthsAgo = new Date();
@@ -207,7 +281,7 @@ const AdminAnalytics = () => {
 
         const farmerPerformance = Object.entries(farmerYields)
           .map(([farmerId, totalYield]) => {
-            const farmer = farmersData.data.find(f => f.id === farmerId);
+            const farmer = farmersDataResp.data.find(f => f.id === farmerId);
             return {
               id: farmerId,
               name: `${farmer?.users?.first_name} ${farmer?.users?.last_name}`,
@@ -236,7 +310,7 @@ const AdminAnalytics = () => {
         // Calculate average yield per farmer per year
         const years = Object.keys(yearlyData).sort();
         const avgYields = years.map(year => 
-          yearlyData[year] / yearlyFarmerCounts[year].size
+          (yearlyFarmerCounts[year].size > 0 ? yearlyData[year] / yearlyFarmerCounts[year].size : 0)
         );
 
         setYearlyProductivity({
@@ -266,38 +340,68 @@ const AdminAnalytics = () => {
           }]
         });
 
-        // Calculate predictive metrics
-        const recentYear = Math.max(...years);
-        const previousYear = recentYear - 1;
-        
-        // Calculate growth rate
-        const growthRate = farmersByYear[farmersByYear.length - 1] / farmersByYear[farmersByYear.length - 2] - 1;
-        
-        // Calculate expected yield based on recent trends
-        const recentYieldPerFarmer = yearlyData[recentYear] / yearlyFarmerCounts[recentYear].size;
-        const expectedYield = recentYieldPerFarmer * (1 + growthRate);
+        // --- Predictive Analytics Calculations ---
+        let expectedYieldGrowth = 0;
+        let projectedAvgYield = 0;
+        if (years.length >= 2) {
+          const lastYearAvg = avgYields[avgYields.length - 2];
+          const thisYearAvg = avgYields[avgYields.length - 1];
+          expectedYieldGrowth = lastYearAvg > 0 ? (thisYearAvg - lastYearAvg) / lastYearAvg : 0;
+          projectedAvgYield = thisYearAvg * (1 + expectedYieldGrowth);
+        } else if (years.length === 1) {
+          projectedAvgYield = avgYields[0];
+        }
+
+        // --- Debugging Logs ---
+        console.log('[AdminAnalytics] Yearly Data:', yearlyData);
+        console.log('[AdminAnalytics] Yearly Farmer Counts:', yearlyFarmerCounts);
+        console.log('[AdminAnalytics] Avg Yields by Year:', avgYields);
+        console.log('[AdminAnalytics] Growth & Yield:', { expectedYieldGrowth, projectedAvgYield });
 
         // Calculate performance categories
+        const farmerNameMap = new Map();
+        farmersDataResp.data.forEach(f => {
+            if (f.id && f.users) {
+                farmerNameMap.set(f.id, `${f.users.first_name} ${f.users.last_name}`);
+            }
+        });
+
         const farmerPerformances = Object.entries(farmerYields).map(([farmerId, totalYield]) => ({
           farmerId,
+          name: farmerNameMap.get(farmerId) || 'Unknown Farmer',
           avgYield: totalYield / (harvestData.data.filter(h => h.farmer_id === farmerId).length || 1)
         }));
 
         const sortedYields = farmerPerformances.map(f => f.avgYield).sort((a, b) => b - a);
-        const highPerformanceThreshold = sortedYields[Math.floor(sortedYields.length * 0.2)] || 0; // Top 20%
-        const lowPerformanceThreshold = sortedYields[Math.floor(sortedYields.length * 0.8)] || 0; // Bottom 20%
-
-        const performanceCategories = {
-          high: farmerPerformances.filter(f => f.avgYield >= highPerformanceThreshold).length,
-          average: farmerPerformances.filter(f => f.avgYield < highPerformanceThreshold && f.avgYield > lowPerformanceThreshold).length,
-          needsSupport: farmerPerformances.filter(f => f.avgYield <= lowPerformanceThreshold).length
-        };
+        const highPerformanceThreshold = sortedYields.length > 0 ? sortedYields[Math.floor(sortedYields.length * 0.2)] || 0 : 0;
+        const lowPerformanceThreshold = sortedYields.length > 0 ? sortedYields[Math.floor(sortedYields.length * 0.8)] || 0 : 0;
+        
+        const high_farmers = farmerPerformances.filter(f => f.avgYield >= highPerformanceThreshold);
+        const average_farmers = farmerPerformances.filter(f => f.avgYield < highPerformanceThreshold && f.avgYield > lowPerformanceThreshold);
+        const needsSupport_farmers = farmerPerformances.filter(f => f.avgYield <= lowPerformanceThreshold);
 
         setPredictiveMetrics({
-          expectedYield: expectedYield,
-          growthRate: growthRate,
-          performanceCategories
+          expectedYield: projectedAvgYield,
+          growthRate: expectedYieldGrowth,
+          performanceCategories: {
+            high: {
+                count: high_farmers.length,
+                farmers: high_farmers.map(f => f.name)
+            },
+            average: {
+                count: average_farmers.length,
+                farmers: average_farmers.map(f => f.name)
+            },
+            needsSupport: {
+                count: needsSupport_farmers.length,
+                farmers: needsSupport_farmers.map(f => f.name)
+            }
+          }
         });
+
+        // Generate DSS recommendations
+        generateDssRecommendations(farmerPerformance, gradeData, farmersDataResp.data);
+
 
       } catch (err) {
         console.error('Error fetching farmer analytics:', err);
@@ -309,6 +413,50 @@ const AdminAnalytics = () => {
 
     fetchFarmerAnalytics();
   }, []);
+
+  const generateDssRecommendations = (farmerPerformance, gradeDistribution, allFarmers) => {
+    const recommendations = [];
+    const lowPerformers = farmerPerformance.filter(f => f.totalYield < 50); // Example threshold
+  
+    // Recommendation for underperforming farmers
+    if (lowPerformers.length > 2) {
+      recommendations.push({
+        type: 'Action',
+        title: 'Support Underperforming Farmers',
+        description: `More than ${lowPerformers.length} farmers have a total yield below 50kg. Consider targeted training or resource allocation for these farmers.`
+      });
+    }
+  
+    // Recommendation based on grade distribution
+    const totalGrades = gradeDistribution.premium + gradeDistribution.fine + gradeDistribution.commercial;
+    if (totalGrades > 0 && (gradeDistribution.commercial / totalGrades) > 0.4) {
+      recommendations.push({
+        type: 'Warning',
+        title: 'High Commercial Grade Ratio',
+        description: 'Over 40% of the coffee is commercial grade. Investigate farming practices to improve quality and increase premium yields.'
+      });
+    }
+  
+    // Opportunity for top performers
+    const topPerformer = farmerPerformance[0];
+    if (topPerformer) {
+      recommendations.push({
+        type: 'Opportunity',
+        title: 'Leverage Top Performers',
+        description: `Farmer ${topPerformer.name} is a top performer. Analyze their methods and share best practices with other farmers.`
+      });
+    }
+  
+    setDssRecommendations(recommendations);
+  };
+
+  // Calculate average farm_elevation for use as altitude (or use 0 if not available)
+  const averageElevation = React.useMemo(() => {
+    if (!Array.isArray(farmersData) || farmersData.length === 0) return 0;
+    const elevations = farmersData.map(f => Number(f.farm_elevation) || 0).filter(e => e > 0);
+    if (elevations.length === 0) return 0;
+    return Math.round(elevations.reduce((a, b) => a + b, 0) / elevations.length);
+  }, [farmersData]);
 
   if (loading) {
     return (
@@ -347,6 +495,19 @@ const AdminAnalytics = () => {
               Comprehensive overview of farmer performance and trends
             </p>
           </div>
+
+          {/* Coffee Grade Prediction (R API) - moved up */}
+          {/* <div className={`mb-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
+            <h2 className={`text-xl font-semibold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Coffee Grade Prediction (R API)</h2>
+            <CoffeeSampleGrading
+              altitude={averageElevation}
+              onSubmit={(sample) => {
+                // TODO: Call the R API here and handle the result
+                alert('Sample submitted: ' + JSON.stringify(sample, null, 2));
+              }}
+              isDarkMode={isDarkMode}
+            />
+          </div> */}
 
           {/* Current Farmer Analytics */}
           <div className="mt-8">
@@ -525,50 +686,80 @@ const AdminAnalytics = () => {
             {/* Predictive Analytics Section */}
             <div className="mt-12 mb-8">
               <h2 className={`text-xl font-semibold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                Predictive Analytics
+                Decision Support & Predictive Analytics
               </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className={`p-6 rounded-lg shadow ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                  <h3 className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Expected Yield Growth
-                  </h3>
-                  <p className={`mt-2 text-3xl font-bold ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
-                    {(predictiveMetrics.growthRate * 100).toFixed(1)}%
-                  </p>
-                  <p className={`mt-1 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Projected annual growth rate
-                  </p>
-                </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* DSS Component */}
+                <AdminDSS recommendations={dssRecommendations} isDarkMode={isDarkMode} />
 
-                <div className={`p-6 rounded-lg shadow ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                  <h3 className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Projected Average Yield
-                  </h3>
-                  <p className={`mt-2 text-3xl font-bold ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
-                    {predictiveMetrics.expectedYield.toFixed(1)} kg
-                  </p>
-                  <p className={`mt-1 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Expected yield per farmer next year
-                  </p>
-                </div>
+                {/* Predictive Metrics */}
+                <div className="space-y-6">
+                  {/* <div className={`p-6 rounded-lg shadow ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <h3 className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Expected Yield Growth
+                    </h3>
+                    <p className={`mt-2 text-3xl font-bold ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
+                      {(predictiveMetrics.growthRate * 100).toFixed(1)}%
+                    </p>
+                    <p className={`mt-1 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Projected annual growth rate
+                    </p>
+                  </div>
 
-                <div className={`p-6 rounded-lg shadow ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                  <h3 className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Performance Distribution
-                  </h3>
-                  <div className="mt-2 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className={isDarkMode ? 'text-green-400' : 'text-green-600'}>High Performing</span>
-                      <span className="font-bold">{predictiveMetrics.performanceCategories.high}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className={isDarkMode ? 'text-blue-400' : 'text-blue-600'}>Average</span>
-                      <span className="font-bold">{predictiveMetrics.performanceCategories.average}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className={isDarkMode ? 'text-orange-400' : 'text-orange-600'}>Needs Support</span>
-                      <span className="font-bold">{predictiveMetrics.performanceCategories.needsSupport}</span>
+                  <div className={`p-6 rounded-lg shadow ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <h3 className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Projected Average Yield
+                    </h3>
+                    <p className={`mt-2 text-3xl font-bold ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                      {predictiveMetrics.expectedYield.toFixed(1)} kg
+                    </p>
+                    <p className={`mt-1 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Expected yield per farmer next year
+                    </p>
+                  </div> */}
+
+                  <div className={`p-6 rounded-lg shadow ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <h3 className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Performance Distribution
+                    </h3>
+                    <div className="mt-2 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className={isDarkMode ? 'text-green-400' : 'text-green-600'}>High Performing</span>
+                          <button onClick={() => setExpandedCategories(prev => ({...prev, high: !prev.high}))} className="ml-2 text-xs text-gray-400">(show/hide)</button>
+                        </div>
+                        <span className="font-bold">{predictiveMetrics.performanceCategories.high.count}</span>
+                      </div>
+                      {expandedCategories.high && (
+                          <ul className="list-disc list-inside text-sm text-gray-500">
+                              {predictiveMetrics.performanceCategories.high.farmers.map(name => <li key={name}>{name}</li>)}
+                          </ul>
+                      )}
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className={isDarkMode ? 'text-blue-400' : 'text-blue-600'}>Average</span>
+                          <button onClick={() => setExpandedCategories(prev => ({...prev, average: !prev.average}))} className="ml-2 text-xs text-gray-400">(show/hide)</button>
+                        </div>
+                        <span className="font-bold">{predictiveMetrics.performanceCategories.average.count}</span>
+                      </div>
+                      {expandedCategories.average && (
+                          <ul className="list-disc list-inside text-sm text-gray-500">
+                              {predictiveMetrics.performanceCategories.average.farmers.map(name => <li key={name}>{name}</li>)}
+                          </ul>
+                      )}
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className={isDarkMode ? 'text-orange-400' : 'text-orange-600'}>Needs Support</span>
+                          <button onClick={() => setExpandedCategories(prev => ({...prev, needsSupport: !prev.needsSupport}))} className="ml-2 text-xs text-gray-400">(show/hide)</button>
+                        </div>
+                        <span className="font-bold">{predictiveMetrics.performanceCategories.needsSupport.count}</span>
+                      </div>
+                      {expandedCategories.needsSupport && (
+                          <ul className="list-disc list-inside text-sm text-gray-500">
+                              {predictiveMetrics.performanceCategories.needsSupport.farmers.map(name => <li key={name}>{name}</li>)}
+                          </ul>
+                      )}
                     </div>
                   </div>
                 </div>

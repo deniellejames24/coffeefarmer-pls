@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/AuthProvider';
 import { useTheme } from '../lib/ThemeContext';
 import '../styles/Styles.css';
+import logo from '../assets/logo.png';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -14,19 +15,16 @@ const Navbar = () => {
     { name: "Dashboard", path: "/dashboard" },
     { name: "Farmer Management", path: "/user-management" },
     { name: "Analytics", path: "/admin-analytics" },
+    { name: "Verification", path: "/admin-verification" },
     { name: "DSS Insights", path: "/farmer-recommendations" },
     { name: "Farmer Report", path: "/farmer-reports" },
-    { name: "Revenue Forecast", path: "/revenue-forecast" },
   ];
 
   const farmerLinks = [
     { name: "Dashboard", path: "/farmer-dashboard" },
     { name: "User Profile", path: "/user-profile" },
-    { name: "Predictive Analytics", path: "/predictive-analytics" },
-    { name: "DSS Recommendations", path: "/dss-recommendations" },
     { name: "Land & Plant Declaration", path: "/land-declaration" },
     { name: "Harvest Reporting", path: "/harvest-reporting" },
-    { name: "Revenue Forecast", path: "/revenue-forecast" },
   ];
 
   const navLinks = user?.role === 'admin' ? adminLinks : farmerLinks;
@@ -46,14 +44,18 @@ const Navbar = () => {
       <div className={`p-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className="text-2xl">☕</div>
+            <img src={logo} alt="CoffeeFarmer Logo" className="w-8 h-8" />
             <h1 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
               {user?.role === 'admin' ? 'Admin Panel' : 'Farmer Panel'}
             </h1>
           </div>
           <button
             onClick={toggleTheme}
-            className={`p-2 rounded-md ${isDarkMode ? 'text-yellow-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100'}`}
+            className={`p-2 rounded-md transition-colors duration-200
+              ${isDarkMode
+                ? 'text-yellow-400 bg-gray-800 hover:bg-gray-700 focus:bg-gray-700'
+                : 'text-[#7c4a21] bg-[#f3e5d8] hover:bg-[#e9dbc7] focus:bg-[#e9dbc7] border border-[#e9dbc7]'}
+            `}
           >
             {isDarkMode ? (
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

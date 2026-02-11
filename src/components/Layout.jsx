@@ -8,7 +8,7 @@ const Layout = ({ children }) => {
   const { isDarkMode } = useTheme();
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} flex`}>
+    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-[#f5efe6]'} flex`}>
       <Navbar />
       <div className="flex-1 p-8 ml-64">
         {children}

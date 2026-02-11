@@ -19,11 +19,11 @@ import HarvestReporting from "./pages/HarvestReporting";
 import FarmerReports from "./pages/FarmerReports";
 import LandingPage from "./pages/LandingPage";
 import AdminAnalytics from "./pages/AdminAnalytics";
+import AdminVerification from "./pages/AdminVerification";
 import { ThemeProvider } from './lib/ThemeContext';
 import './styles/landing.css';
 import PlantStatus from "./pages/PlantStatus";
 import FarmerProfile from "./pages/FarmerProfile";
-import RevenueForecast from "./pages/RevenueForecast";
 
 function App() {
   return (
@@ -69,6 +69,15 @@ function App() {
               element={
                 <ProtectedRoute requiredRoles={['admin']}>
                   <AdminAnalytics />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin-verification"
+              element={
+                <ProtectedRoute requiredRoles={['admin']}>
+                  <AdminVerification />
                 </ProtectedRoute>
               }
             />
@@ -160,15 +169,6 @@ function App() {
               element={
                 <ProtectedRoute requiredRoles={['admin']}>
                   <FarmerProfile />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/revenue-forecast"
-              element={
-                <ProtectedRoute requiredRoles={['farmer', 'admin']}>
-                  <RevenueForecast />
                 </ProtectedRoute>
               }
             />

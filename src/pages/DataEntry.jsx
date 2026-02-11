@@ -312,8 +312,26 @@ const DataEntry = () => {
                       <td key={idx}>{value}</td>
                     ))}
                     <td className="sticky">
-                      <button onClick={() => handleEdit(record)}>Edit</button>
-                      <button onClick={() => handleDelete(record.id)}>Delete</button>
+                      <button 
+                        onClick={() => handleEdit(record)}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors mr-2 ${
+                          isDarkMode
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                            : 'bg-blue-100 hover:bg-blue-200 text-blue-700'
+                        }`}
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(record.id)}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                          isDarkMode
+                            ? 'bg-red-600 hover:bg-red-700 text-white'
+                            : 'bg-red-100 hover:bg-red-200 text-red-700'
+                        }`}
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}

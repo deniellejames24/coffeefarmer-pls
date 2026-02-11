@@ -41,8 +41,6 @@ const FarmerReports = () => {
   // Filter States
   const [searchName, setSearchName] = useState("");
   const [searchLocation, setSearchLocation] = useState("");
-  const [minYield, setMinYield] = useState("");
-  const [minTrees, setMinTrees] = useState("");
 
   // New states for unique values
   const [uniqueNames, setUniqueNames] = useState([]);
@@ -78,7 +76,7 @@ const FarmerReports = () => {
       // Fetch plant data
       const { data: plantData, error: plantError } = await supabase
         .from('plant_data')
-        .select('plant_id, farmer_id, number_of_tree_planted');
+        .select('plant_id, farmer_id, number_of_tree_planted, elevation, cluster_size');
 
       if (plantError) throw plantError;
 
@@ -197,24 +195,12 @@ const FarmerReports = () => {
       );
       }
 
-    if (minYield) {
-      filtered = filtered.filter(farmer =>
-        farmer.totalDryYield >= parseFloat(minYield)
-      );
-      }
-
-    if (minTrees) {
-      filtered = filtered.filter(farmer =>
-        farmer.total_trees >= parseInt(minTrees)
-      );
-      }
-
     setFilteredFarmers(filtered);
-  }, [farmersReport, searchName, searchLocation, minYield, minTrees]);
+  }, [farmersReport, searchName, searchLocation]);
 
   useEffect(() => {
     applyFilters();
-  }, [searchName, searchLocation, minYield, minTrees, applyFilters]);
+  }, [searchName, searchLocation, applyFilters]);
 
   if (!user) {
     return <Navigate to="/login" />;
@@ -314,119 +300,61 @@ const FarmerReports = () => {
             </div>
 
         {/* Filter Section */}
-        <div className={`rounded-lg p-6 mb-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-          <h2 className={`text-xl font-semibold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-            Filter Farmers
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <SearchableDropdown
-                  value={searchName}
-              onChange={setSearchName}
-              options={uniqueNames}
-                  placeholder="Search by name..."
-              label="Farmer Name"
-              isDarkMode={isDarkMode}
-              icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-              }
-            />
-
-            <SearchableDropdown
-                  value={searchLocation}
-              onChange={setSearchLocation}
-              options={uniqueLocations}
-                  placeholder="Search by location..."
-              label="Location"
-              isDarkMode={isDarkMode}
-              icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-              }
-            />
-
-            <div className="relative">
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                Minimum Yield (kg)
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={minYield}
-                  onChange={(e) => setMinYield(e.target.value)}
-                  placeholder="Min yield..."
-                  className={`mt-1 block w-full rounded-lg border-2 px-4 py-2.5 
-                    placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-blue-500 
-                    focus:ring-opacity-50 transition-colors duration-200
-                    ${isDarkMode 
-                      ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500' 
-                      : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`}
-                />
-                <div className={`absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                </div>
-              </div>
+        <div className={`rounded-lg p-4 mb-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}> 
+          <h2 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Filter Farmers</h2>
+          <div className="flex flex-col md:flex-row md:items-end md:space-x-4 space-y-3 md:space-y-0">
+            <div className="flex-1 min-w-[180px]">
+              <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Farmer Name</label>
+              <select
+                value={searchName}
+                onChange={e => setSearchName(e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+              >
+                <option value="">All</option>
+                {uniqueNames.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
             </div>
-
-            <div className="relative">
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                Minimum Trees
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={minTrees}
-                  onChange={(e) => setMinTrees(e.target.value)}
-                  placeholder="Min trees..."
-                  className={`mt-1 block w-full rounded-lg border-2 px-4 py-2.5 
-                    placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-blue-500 
-                    focus:ring-opacity-50 transition-colors duration-200
-                    ${isDarkMode 
-                      ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500' 
-                      : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`}
-                />
-                <div className={`absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                  </svg>
-                </div>
-              </div>
+            <div className="flex-1 min-w-[180px]">
+              <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Location</label>
+              <select
+                value={searchLocation}
+                onChange={e => setSearchLocation(e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+              >
+                <option value="">All</option>
+                {uniqueLocations.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
             </div>
-          </div>
-
-          <div className="mt-6 flex justify-end space-x-3">
-            <button
-              onClick={() => {
-                setSearchName("");
-                setSearchLocation("");
-                setMinYield("");
-                setMinTrees("");
-              }}
-              className={`px-4 py-2 rounded-lg transition-colors duration-200 flex items-center space-x-2
-                ${isDarkMode 
-                  ? 'bg-gray-700 text-white hover:bg-gray-600' 
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            <div className="flex flex-row space-x-2 mt-2 md:mt-0">
+              <button
+                onClick={() => {
+                  setSearchName("");
+                  setSearchLocation("");
+                }}
+                className={`px-3 py-2 rounded-lg flex items-center text-sm transition-colors duration-200
+                  ${isDarkMode 
+                    ? 'bg-gray-700 text-white hover:bg-gray-600' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              >
+                <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
-              <span>Clear Filters</span>
-            </button>
-            <button
-              onClick={applyFilters}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 
-                transition-colors duration-200 flex items-center space-x-2"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                Clear
+              </button>
+              <button
+                onClick={applyFilters}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 text-sm flex items-center transition-colors duration-200"
+              >
+                <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                 </svg>
-              <span>Apply Filters</span>
-            </button>
+                Apply
+              </button>
+            </div>
           </div>
         </div>
 

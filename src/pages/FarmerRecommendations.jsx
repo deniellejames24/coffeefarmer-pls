@@ -62,7 +62,7 @@ const FarmerRecommendations = () => {
       // Fetch plant data
       const { data: plantData, error: plantError } = await supabase
         .from('plant_data')
-        .select('plant_id, farmer_id, number_of_tree_planted');
+        .select('plant_id, farmer_id, number_of_tree_planted, elevation, cluster_size');
 
       if (plantError) throw plantError;
 
@@ -210,7 +210,7 @@ const FarmerRecommendations = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className={`mb-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
           <h1 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-            DSS Insights
+            Farmer DSS Insights
           </h1>
           {user && (
             <p className={`mt-2 text-lg ${isDarkMode ? 'text-gray-400' : 'text-gray-700'}`}>
@@ -298,7 +298,7 @@ const FarmerRecommendations = () => {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
                   <div className={`p-4 rounded-md ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
                     <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                       Yield per Tree
@@ -311,12 +311,32 @@ const FarmerRecommendations = () => {
                   </div>
                   <div className={`p-4 rounded-md ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
                     <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Fine Grade
+                    </p>
+                    <p className={`text-xl font-bold ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>
+                      {farmer.finePercentage.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className={`p-4 rounded-md ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                    <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                       Premium Grade
                     </p>
                     <p className={`text-xl font-bold ${
                       isDarkMode ? 'text-white' : 'text-gray-900'
                     }`}>
                       {farmer.premiumPercentage.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className={`p-4 rounded-md ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                    <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Commercial Grade
+                    </p>
+                    <p className={`text-xl font-bold ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>
+                      {farmer.commercialPercentage.toFixed(1)}%
                     </p>
                   </div>
                   <div className={`p-4 rounded-md ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
@@ -352,17 +372,17 @@ const FarmerRecommendations = () => {
                         </h3>
                         <Bar
                           data={{
-                            labels: ['Premium', 'Fine', 'Commercial'],
+                            labels: ['Fine', 'Premium', 'Commercial'],
                             datasets: [{
                               label: 'Grade Distribution (%)',
                               data: [
-                                farmer.premiumPercentage,
                                 farmer.finePercentage,
+                                farmer.premiumPercentage,
                                 farmer.commercialPercentage
                               ],
                               backgroundColor: isDarkMode 
-                                ? ['rgba(129, 140, 248, 0.8)', 'rgba(96, 165, 250, 0.8)', 'rgba(147, 197, 253, 0.8)']
-                                : ['rgba(99, 102, 241, 0.8)', 'rgba(59, 130, 246, 0.8)', 'rgba(96, 165, 250, 0.8)']
+                                ? ['rgba(96, 165, 250, 0.8)', 'rgba(129, 140, 248, 0.8)', 'rgba(147, 197, 253, 0.8)']
+                                : ['rgba(59, 130, 246, 0.8)', 'rgba(99, 102, 241, 0.8)', 'rgba(96, 165, 250, 0.8)']
                             }]
                           }}
                           options={{

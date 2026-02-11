@@ -81,6 +81,17 @@ const UserProfile = () => {
     setError("");
     setPasswordChangeMessage("");
 
+    // Fetch old profile data for activity log
+    let oldProfile = null;
+    try {
+      const { data: oldData } = await supabase
+        .from("users")
+        .select("first_name, middle_name, last_name")
+        .eq("id", authUser?.id)
+        .single();
+      if (oldData) oldProfile = oldData;
+    } catch (e) { /* ignore */ }
+
     try {
       const { error } = await supabase
         .from("users")
@@ -93,6 +104,59 @@ const UserProfile = () => {
 
       if (error) throw error;
       setError("Profile updated successfully!");
+
+      // Log activity if any field changed
+      if (oldProfile) {
+        const changedFields = [];
+        if (oldProfile.first_name !== profileData.firstName) changedFields.push('First Name');
+        if (oldProfile.middle_name !== profileData.middleName) changedFields.push('Middle Name');
+        if (oldProfile.last_name !== profileData.lastName) changedFields.push('Last Name');
+        if (changedFields.length > 0) {
+          const oldChanged = {};
+          const newChanged = {};
+          if (changedFields.includes('First Name')) {
+            oldChanged.first_name = oldProfile.first_name;
+            newChanged.first_name = profileData.firstName;
+          }
+          if (changedFields.includes('Middle Name')) {
+            oldChanged.middle_name = oldProfile.middle_name;
+            newChanged.middle_name = profileData.middleName;
+          }
+          if (changedFields.includes('Last Name')) {
+            oldChanged.last_name = oldProfile.last_name;
+            newChanged.last_name = profileData.lastName;
+          }
+          // Fetch farmer_id if user is a farmer
+          let farmerId = null;
+          try {
+            const { data: farmerDetail } = await supabase
+              .from('farmer_detail')
+              .select('id')
+              .eq('id', authUser.id)
+              .single();
+            if (farmerDetail) farmerId = farmerDetail.id;
+          } catch (e) { /* ignore */ }
+          try {
+            const logRes = await supabase.from("activity_log").insert({
+              user_id: authUser.id,
+              farmer_id: farmerId,
+              entity_type: "User Profile",
+              entity_id: null,
+              action: "update",
+              change_summary: `Changed ${changedFields.join(', ')} in User Profile`,
+              old_data: JSON.stringify(oldChanged),
+              new_data: JSON.stringify(newChanged)
+            });
+            if (logRes.error) {
+              console.error("Failed to insert activity log for user profile update:", logRes.error);
+            } else {
+              console.log("Activity log recorded for user profile update.");
+            }
+          } catch (logErr) {
+            console.error("Error inserting activity log for user profile update:", logErr);
+          }
+        }
+      }
     } catch (error) {
       console.error("Error updating profile:", error.message);
       setError("Error updating profile: " + error.message);
@@ -156,7 +220,6 @@ const UserProfile = () => {
     { name: "DSS Recommendations", path: "/dss-recommendations" },
     { name: "Land & Plant Declaration", path: "/land-declaration" },
     { name: "Harvest Reporting", path: "/harvest-reporting" },
-    { name: "Revenue Forecast", path: "/revenue-forecast" },
   ];
 
   // Determine which set of links to use based on the current user's role
@@ -186,7 +249,7 @@ const UserProfile = () => {
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="mb-8">
+        <div className={`mb-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
           <h1 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
             User Profile
           </h1>

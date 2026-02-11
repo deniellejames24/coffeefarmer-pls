@@ -1,5 +1,5 @@
 // src/pages/PredictiveAnalytics.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useTheme } from "../lib/ThemeContext";
@@ -22,6 +22,8 @@ import { useAuth } from "../lib/AuthProvider";
 import { AdvancedAnalytics } from "../lib/ml/AdvancedAnalytics";
 import MLInsights from "../components/analytics/MLInsights";
 import { QualityPredictor } from '../lib/ml/QualityPredictor';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // Register Chart.js components
 ChartJS.register(
@@ -225,6 +227,11 @@ const PredictiveAnalytics = () => {
   const [plants, setPlants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // PDF preview modal state
+  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const pdfDocRef = useRef(null);
 
   // Remove duplicate isLoading state and use the existing loading state
   const [mlAnalysis, setMlAnalysis] = useState(null);
@@ -1162,6 +1169,219 @@ const PredictiveAnalytics = () => {
     }
   }, [historicalHarvests, currentConditions]);
 
+  const handleExportPDF = () => {
+    // Farmer name
+    let farmerName = user?.fullName || (user?.first_name ? `${user.first_name} ${user.last_name || ''}` : '');
+    if (!farmerName && farmerDetails?.first_name) {
+      farmerName = `${farmerDetails.first_name} ${farmerDetails.last_name || ''}`;
+    }
+    farmerName = (farmerName || '-').trim();
+    const doc = new jsPDF();
+    // Title
+    doc.setFontSize(18);
+    doc.text('Predictive Analytics Report', 14, 18);
+    // Date
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 26);
+    // Farmer Name
+    doc.setFontSize(12);
+    doc.text(`Farmer: ${farmerName}`, 14, 34);
+    // Projected Yield
+    doc.setFontSize(14);
+    doc.text('Projected Yield', 14, 44);
+    doc.setFontSize(11);
+    doc.text(`Predicted Yield: ${predictedYield || '-'} kg`, 14, 52);
+    doc.text(`Confidence: ${getConfidenceLevel(confidenceScore) || '-'} (${(confidenceScore * 100).toFixed(1)}%)`, 14, 58);
+    // Quality Distribution
+    let nextY = 66;
+    doc.setFontSize(14);
+    doc.text('Quality Distribution', 14, nextY);
+    doc.setFontSize(11);
+    nextY += 8;
+    if (qualityDistribution) {
+      autoTable(doc, {
+        startY: nextY,
+        head: [['Premium (%)', 'Fine (%)', 'Commercial (%)']],
+        body: [[
+          qualityDistribution.premium?.toFixed(1) || '-',
+          qualityDistribution.fine?.toFixed(1) || '-',
+          qualityDistribution.commercial?.toFixed(1) || '-',
+        ]],
+        theme: 'grid',
+        headStyles: { fillColor: [99, 102, 241] },
+        styles: { fontSize: 11 },
+      });
+      nextY = doc.lastAutoTable.finalY + 10;
+    } else {
+      doc.text('No quality data available.', 14, nextY);
+      nextY += 10;
+    }
+    // Seasonal Forecast
+    doc.setFontSize(14);
+    doc.text('Seasonal Yield Forecast', 14, nextY);
+    doc.setFontSize(11);
+    nextY += 8;
+    let forecastRows = [];
+    if (seasonalYieldForecast) {
+      if (Array.isArray(seasonalYieldForecast)) {
+        forecastRows = seasonalYieldForecast;
+      } else if (typeof seasonalYieldForecast === 'object') {
+        forecastRows = Object.entries(seasonalYieldForecast).map(([season, yieldVal]) => ({ season, yield: yieldVal }));
+      }
+    }
+    if (forecastRows.length > 0) {
+      autoTable(doc, {
+        startY: nextY,
+        head: [['Season', 'Expected Yield (kg)']],
+        body: forecastRows.map(f => [f.season, f.yield]),
+        theme: 'grid',
+        headStyles: { fillColor: [16, 185, 129] },
+        styles: { fontSize: 11 },
+      });
+      nextY = doc.lastAutoTable.finalY + 10;
+    } else {
+      doc.text('No seasonal forecast available.', 14, nextY);
+      nextY += 10;
+    }
+    // Recent Harvests Table
+    doc.setFontSize(14);
+    doc.text('Recent Harvests', 14, nextY);
+    doc.setFontSize(11);
+    nextY += 8;
+    if (historicalHarvests && historicalHarvests.length > 0) {
+      autoTable(doc, {
+        startY: nextY,
+        head: [['Date', 'Raw (kg)', 'Premium', 'Fine', 'Commercial']],
+        body: historicalHarvests.slice(-5).map(h => [
+          new Date(h.harvest_date).toLocaleDateString(),
+          h.coffee_raw_quantity,
+          h.coffee_premium_grade,
+          h.coffee_fine_grade,
+          h.coffee_commercial_grade
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246] },
+        styles: { fontSize: 11 },
+      });
+      nextY = doc.lastAutoTable.finalY + 10;
+    } else {
+      doc.text('No harvest data available.', 14, nextY);
+    }
+    // Save the PDF with farmer name in filename
+    const safeName = farmerName.replace(/[^a-zA-Z0-9]/g, '_');
+    doc.save(`Predictive_Analytics_${safeName}.pdf`);
+  };
+
+  const handleExportWithPreview = (download = false) => {
+    let farmerName = user?.fullName || (user?.first_name ? `${user.first_name} ${user.last_name || ''}` : '');
+    if (!farmerName && farmerDetails?.first_name) {
+      farmerName = `${farmerDetails.first_name} ${farmerDetails.last_name || ''}`;
+    }
+    farmerName = (farmerName || '-').trim();
+    const doc = new jsPDF();
+    pdfDocRef.current = doc;
+    // Title
+    doc.setFontSize(18);
+    doc.text('Predictive Analytics Report', 14, 18);
+    // Date
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 26);
+    // Farmer Name
+    doc.setFontSize(12);
+    doc.text(`Farmer: ${farmerName}`, 14, 34);
+    // Projected Yield
+    doc.setFontSize(14);
+    doc.text('Projected Yield', 14, 44);
+    doc.setFontSize(11);
+    doc.text(`Predicted Yield: ${predictedYield || '-'} kg`, 14, 52);
+    doc.text(`Confidence: ${getConfidenceLevel(confidenceScore) || '-'} (${(confidenceScore * 100).toFixed(1)}%)`, 14, 58);
+    // Quality Distribution
+    let nextY = 66;
+    doc.setFontSize(14);
+    doc.text('Quality Distribution', 14, nextY);
+    doc.setFontSize(11);
+    nextY += 8;
+    if (qualityDistribution) {
+      autoTable(doc, {
+        startY: nextY,
+        head: [['Premium (%)', 'Fine (%)', 'Commercial (%)']],
+        body: [[
+          qualityDistribution.premium?.toFixed(1) || '-',
+          qualityDistribution.fine?.toFixed(1) || '-',
+          qualityDistribution.commercial?.toFixed(1) || '-',
+        ]],
+        theme: 'grid',
+        headStyles: { fillColor: [99, 102, 241] },
+        styles: { fontSize: 11 },
+      });
+      nextY = doc.lastAutoTable.finalY + 10;
+    } else {
+      doc.text('No quality data available.', 14, nextY);
+      nextY += 10;
+    }
+    // Seasonal Forecast
+    doc.setFontSize(14);
+    doc.text('Seasonal Yield Forecast', 14, nextY);
+    doc.setFontSize(11);
+    nextY += 8;
+    let forecastRows = [];
+    if (seasonalYieldForecast) {
+      if (Array.isArray(seasonalYieldForecast)) {
+        forecastRows = seasonalYieldForecast;
+      } else if (typeof seasonalYieldForecast === 'object') {
+        forecastRows = Object.entries(seasonalYieldForecast).map(([season, yieldVal]) => ({ season, yield: yieldVal }));
+      }
+    }
+    if (forecastRows.length > 0) {
+      autoTable(doc, {
+        startY: nextY,
+        head: [['Season', 'Expected Yield (kg)']],
+        body: forecastRows.map(f => [f.season, f.yield]),
+        theme: 'grid',
+        headStyles: { fillColor: [16, 185, 129] },
+        styles: { fontSize: 11 },
+      });
+      nextY = doc.lastAutoTable.finalY + 10;
+    } else {
+      doc.text('No seasonal forecast available.', 14, nextY);
+      nextY += 10;
+    }
+    // Recent Harvests Table
+    doc.setFontSize(14);
+    doc.text('Recent Harvests', 14, nextY);
+    doc.setFontSize(11);
+    nextY += 8;
+    if (historicalHarvests && historicalHarvests.length > 0) {
+      autoTable(doc, {
+        startY: nextY,
+        head: [['Date', 'Raw (kg)', 'Premium', 'Fine', 'Commercial']],
+        body: historicalHarvests.slice(-5).map(h => [
+          new Date(h.harvest_date).toLocaleDateString(),
+          h.coffee_raw_quantity,
+          h.coffee_premium_grade,
+          h.coffee_fine_grade,
+          h.coffee_commercial_grade
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246] },
+        styles: { fontSize: 11 },
+      });
+      nextY = doc.lastAutoTable.finalY + 10;
+    } else {
+      doc.text('No harvest data available.', 14, nextY);
+    }
+    // Show preview or download
+    if (download) {
+      const safeName = farmerName.replace(/[^a-zA-Z0-9]/g, '_');
+      doc.save(`Predictive_Analytics_${safeName}.pdf`);
+    } else {
+      const blob = doc.output('blob');
+      const url = URL.createObjectURL(blob);
+      setPdfUrl(url);
+      setIsPdfPreviewOpen(true);
+    }
+  };
+
   if (loading) {
   return (
     <Layout>
@@ -1190,9 +1410,25 @@ const PredictiveAnalytics = () => {
     <Layout>
       <div className={`container mx-auto px-4 py-8 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
           <div className={`mb-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
-            <h2 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Predictive Analytics
-            </h2>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center">
+                <button
+                  onClick={() => navigate('/farmer-dashboard')}
+                  className={`mr-4 px-3 py-1 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500
+                    ${isDarkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                  aria-label="Back to Farmer Dashboard"
+                >
+                  &larr; Back
+                </button>
+                <h2 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Predictive Analytics</h2>
+              </div>
+              <button
+                onClick={() => handleExportWithPreview(false)}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors duration-200"
+              >
+                Export to PDF
+              </button>
+            </div>
           </div>
 
         {/* Quality Grade and Seasonal Yield Predictions */}
@@ -1618,6 +1854,43 @@ const PredictiveAnalytics = () => {
             </div>
           </div>
         )}
+
+        {/* PDF Preview Modal */}
+      {isPdfPreviewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-3xl w-full p-6 relative flex flex-col`} style={{height: '80vh'}}>
+            <button
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              onClick={() => {
+                setIsPdfPreviewOpen(false);
+                if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+                setPdfUrl(null);
+              }}
+              aria-label="Close"
+            >
+              &times;
+            </button>
+            <h2 className={`text-xl font-bold mb-4 text-center ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>PDF Preview</h2>
+            {pdfUrl && (
+              <iframe
+                id="pdf-preview-iframe"
+                src={pdfUrl}
+                title="PDF Preview"
+                className="w-full flex-1 border rounded"
+                style={{ minHeight: '60vh', background: '#fff' }}
+              />
+            )}
+            <div className="flex justify-end mt-4 gap-2">
+              <button
+                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors duration-200"
+                onClick={() => handleExportWithPreview(true)}
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </Layout>
   );

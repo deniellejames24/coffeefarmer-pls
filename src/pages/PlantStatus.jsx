@@ -67,26 +67,45 @@ const PlantStatus = () => {
     
     try {
       // First, delete existing status for this plant
+      // Fetch old status for logging
+      const { data: oldStatus } = await supabase
+        .from('plant_status')
+        .select('*')
+        .eq('plant_id', plantId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
       await supabase
         .from('plant_status')
         .delete()
         .eq('plant_id', plantId);
-
       // Then insert the new status
-      const { error } = await supabase
+      const { data: newStatus, error } = await supabase
         .from('plant_status')
         .insert([
-      {
-        plant_id: plantId,
-        status: form.status,
-        age_stage: form.age_stage,
-        soil_ph: form.soil_ph,
-        moisture_level: form.moisture_level,
-        last_fertilized: form.last_fertilized
-      }
-    ]);
-
+          {
+            plant_id: plantId,
+            status: form.status,
+            age_stage: form.age_stage,
+            soil_ph: form.soil_ph,
+            moisture_level: form.moisture_level,
+            last_fertilized: form.last_fertilized
+          }
+        ])
+        .select('*')
+        .single();
       if (error) throw error;
+      // Log status update
+      await supabase.from('activity_log').insert({
+        user_id: plant?.farmer_id || null, // Replace with actual user context if available
+        farmer_id: plant?.farmer_id || null,
+        entity_type: 'status',
+        entity_id: plantId,
+        action: 'update',
+        change_summary: `Updated plant status`,
+        old_data: JSON.stringify(oldStatus),
+        new_data: JSON.stringify(newStatus)
+      });
       
     setSuccessMsg("Status updated successfully!");
       
@@ -313,8 +332,8 @@ const PlantStatus = () => {
                   onChange={handleFormChange}
                   className={`w-full px-3 py-2 rounded-lg border ${
                     isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-white focus:border-green-500'
-                      : 'bg-white border-gray-300 text-gray-900 focus:border-green-500'
+                      ? 'bg-gray-700 border-gray-600 text-white focus:border-green-500 date-input-dark'
+                      : 'bg-white border-gray-300 text-gray-900 focus:border-green-500 date-input-light'
                   } focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors`}
                 />
               </div>

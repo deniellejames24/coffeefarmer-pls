@@ -14,6 +14,11 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { useRef } from 'react';
 
 // Register Chart.js components
 ChartJS.register(
@@ -64,6 +69,11 @@ const DSSRecommendations = () => {
   // Add after the existing state declarations
   const [seasonalRecommendations, setSeasonalRecommendations] = useState([]);
   const [bestPractices, setBestPractices] = useState([]);
+
+  // PDF preview modal state
+  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const pdfDocRef = useRef(null);
 
   // Fetch user and plants
   useEffect(() => {
@@ -832,73 +842,237 @@ const DSSRecommendations = () => {
     }
   }, [plants, harvests, statuses]);
 
+  const handleExportPDF = () => {
+    // Only warn if both recommendations and bestPractices are empty
+    if ((!recommendations || recommendations.length === 0) && (!bestPractices || bestPractices.length === 0)) {
+      toast.warn('No recommendations or best practices available to export.');
+      return;
+    }
+    const doc = new jsPDF();
+    // Title
+    doc.setFontSize(18);
+    doc.text('DSS Recommendations', 14, 18);
+    // Date
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 26);
+    // Farmer Name
+    doc.setFontSize(12);
+    let farmerName = userDetails?.fullName || (userDetails?.first_name ? `${userDetails.first_name} ${userDetails.last_name || ''}` : '');
+    farmerName = farmerName.trim() || '-';
+    doc.text(`Farmer: ${farmerName}`, 14, 34);
+    // Recommendations Section
+    doc.setFontSize(14);
+    doc.text('Key Recommendations', 14, 44);
+    doc.setLineWidth(0.5);
+    doc.line(14, 46, 196, 46);
+    let nextY = 52;
+    if (recommendations && recommendations.length > 0) {
+      autoTable(doc, {
+        startY: nextY,
+        head: [['Category', 'Issue', 'Action', 'Impact']],
+        body: recommendations.map(rec => [
+          rec.category || '-',
+          rec.issue || '-',
+          rec.action || '-',
+          rec.impact || '-',
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [34, 197, 94] },
+        styles: { fontSize: 11 },
+      });
+      nextY = doc.lastAutoTable.finalY + 10;
+    } else {
+      doc.setFontSize(11);
+      doc.text('No recommendations found.', 14, nextY + 6);
+      nextY += 12;
+    }
+    // Best Practices Section
+    doc.setFontSize(14);
+    doc.text('Best Practices', 14, nextY);
+    doc.setLineWidth(0.5);
+    doc.line(14, nextY + 2, 196, nextY + 2);
+    nextY += 8;
+    if (bestPractices && bestPractices.length > 0) {
+      bestPractices.forEach((cat, idx) => {
+        doc.setFontSize(12);
+        doc.text(`${cat.category}:`, 14, nextY);
+        nextY += 6;
+        doc.setFontSize(11);
+        cat.practices.forEach(prac => {
+          doc.text(`- ${prac}`, 18, nextY);
+          nextY += 6;
+        });
+        nextY += 2;
+      });
+    } else {
+      doc.setFontSize(11);
+      doc.text('No best practices found.', 14, nextY + 6);
+    }
+    // Save the PDF with farmer name in filename
+    const safeName = farmerName.replace(/[^a-zA-Z0-9]/g, '_');
+    doc.save(`DSS_Recommendations_${safeName}.pdf`);
+  };
+
+  const handleExportWithPreview = (download = false) => {
+    if ((!recommendations || recommendations.length === 0) && (!bestPractices || bestPractices.length === 0)) {
+      toast.warn('No recommendations or best practices available to export.');
+      return;
+    }
+    const doc = new jsPDF();
+    pdfDocRef.current = doc;
+    // Title
+    doc.setFontSize(18);
+    doc.text('DSS Recommendations', 14, 18);
+    // Date
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 26);
+    // Farmer Name
+    doc.setFontSize(12);
+    let farmerName = userDetails?.fullName || (userDetails?.first_name ? `${userDetails.first_name} ${userDetails.last_name || ''}` : '');
+    farmerName = farmerName.trim() || '-';
+    doc.text(`Farmer: ${farmerName}`, 14, 34);
+    // Recommendations Section
+    doc.setFontSize(14);
+    doc.text('Key Recommendations', 14, 44);
+    doc.setLineWidth(0.5);
+    doc.line(14, 46, 196, 46);
+    let nextY = 52;
+    if (recommendations && recommendations.length > 0) {
+      autoTable(doc, {
+        startY: nextY,
+        head: [['Category', 'Issue', 'Action', 'Impact']],
+        body: recommendations.map(rec => [
+          rec.category || '-',
+          rec.issue || '-',
+          rec.action || '-',
+          rec.impact || '-',
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [34, 197, 94] },
+        styles: { fontSize: 11 },
+      });
+      nextY = doc.lastAutoTable.finalY + 10;
+    } else {
+      doc.setFontSize(11);
+      doc.text('No recommendations found.', 14, nextY + 6);
+      nextY += 12;
+    }
+    // Best Practices Section
+    doc.setFontSize(14);
+    doc.text('Best Practices', 14, nextY);
+    doc.setLineWidth(0.5);
+    doc.line(14, nextY + 2, 196, nextY + 2);
+    nextY += 8;
+    if (bestPractices && bestPractices.length > 0) {
+      bestPractices.forEach((cat, idx) => {
+        doc.setFontSize(12);
+        doc.text(`${cat.category}:`, 14, nextY);
+        nextY += 6;
+        doc.setFontSize(11);
+        cat.practices.forEach(prac => {
+          doc.text(`- ${prac}`, 18, nextY);
+          nextY += 6;
+        });
+        nextY += 2;
+      });
+    } else {
+      doc.setFontSize(11);
+      doc.text('No best practices found.', 14, nextY + 6);
+    }
+    // Show preview or download
+    if (download) {
+      const safeName = (userDetails?.fullName || (userDetails?.first_name ? `${userDetails.first_name} ${userDetails.last_name || ''}` : '')).replace(/[^a-zA-Z0-9]/g, '_');
+      doc.save(`DSS_Recommendations_${safeName}.pdf`);
+    } else {
+      const blob = doc.output('blob');
+      const url = URL.createObjectURL(blob);
+      setPdfUrl(url);
+      setIsPdfPreviewOpen(true);
+    }
+  };
+
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <ToastContainer position="top-right" autoClose={3000} />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Enhanced Header Section */}
-        <div className={`mb-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                DSS Recommendations
-              </h2>
+        <div className={`mb-6 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-4`}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center">
+              <button
+                onClick={() => navigate('/farmer-dashboard')}
+                className={`mr-4 px-3 py-1 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500
+                  ${isDarkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                aria-label="Back to Farmer Dashboard"
+              >
+                &larr; Back
+              </button>
+              <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>DSS Recommendations</h2>
+            </div>
+            <button
+              onClick={() => handleExportWithPreview(false)}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors duration-200"
+            >
+              Export to PDF
+            </button>
+          </div>
+          <div>
               {userDetails && (
-                <p className={`mt-2 text-lg ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                <p className={`mt-1 text-md ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   Welcome back, <span className="font-semibold">
                     {userDetails.first_name} {userDetails.middle_name ? `${userDetails.middle_name} ` : ''}{userDetails.last_name}
                   </span>
                 </p>
               )}
-              <p className={`mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              <p className={`mt-1 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                 Here are your personalized recommendations and insights
               </p>
             </div>
-          </div>
         </div>
 
         {loading ? (
-          <div className="animate-pulse space-y-6">
+          <div className="animate-pulse space-y-4">
             <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-            <div className="h-40 bg-gray-200 rounded"></div>
+            <div className="h-32 bg-gray-200 rounded"></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="h-32 bg-gray-200 rounded"></div>
-              <div className="h-32 bg-gray-200 rounded"></div>
+              <div className="h-28 bg-gray-200 rounded"></div>
+              <div className="h-28 bg-gray-200 rounded"></div>
             </div>
           </div>
         ) : (
           <>
             {/* Yield Statistics */}
             {yieldStats && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                  <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className={`p-4 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <h3 className={`text-md font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     Yield per Tree
                   </h3>
-                  <p className={`text-3xl font-bold mt-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                  <p className={`text-2xl font-bold mt-1 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
                     {yieldStats.yieldPerTree.toFixed(2)} kg
                   </p>
                 </div>
-                <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                  <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                <div className={`p-4 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <h3 className={`text-md font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     Premium Grade
                   </h3>
-                  <p className={`text-3xl font-bold mt-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                  <p className={`text-2xl font-bold mt-1 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
                     {yieldStats.premiumPercentage.toFixed(1)}%
                   </p>
                 </div>
-                <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                  <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                <div className={`p-4 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <h3 className={`text-md font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     Total Trees
                   </h3>
-                  <p className={`text-3xl font-bold mt-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                  <p className={`text-2xl font-bold mt-1 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
                     {yieldStats.totalTrees}
                   </p>
                 </div>
-                <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                  <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                <div className={`p-4 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <h3 className={`text-md font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     Harvests
                   </h3>
-                  <p className={`text-3xl font-bold mt-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                  <p className={`text-2xl font-bold mt-1 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
                     {yieldStats.harvestCount}
                   </p>
                 </div>
@@ -907,12 +1081,12 @@ const DSSRecommendations = () => {
 
             {/* Grade Distribution and Recommendations */}
             {gradeDistribution && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div className={`mb-8 p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <h2 className={`text-xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className={`p-4 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                <h2 className={`text-lg font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                   Grade Distribution (kg)
                 </h2>
-                <div className="h-64">
+                <div className="h-56">
                   <Bar
                     data={{
                       labels: ['Premium', 'Fine', 'Commercial'],
@@ -968,15 +1142,15 @@ const DSSRecommendations = () => {
                 </div>
               </div>
 
-                <div className="space-y-4">
-                  <h3 className={`text-xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                    Recommendations
+                <div className="space-y-3">
+                  <h3 className={`text-lg font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                    Key Recommendations
                   </h3>
-                  <div className="max-h-[500px] overflow-y-auto pr-2 space-y-4">
+                  <div className="max-h-[280px] overflow-y-auto pr-2 space-y-3">
                     {recommendations.map((rec, index) => (
                       <div
                         key={index}
-                        className={`p-4 rounded-md border-l-4 ${
+                        className={`p-3 rounded-md border-l-4 ${
                           rec.type === 'critical'
                             ? isDarkMode 
                               ? 'bg-red-900/30 border-red-500' 
@@ -990,11 +1164,11 @@ const DSSRecommendations = () => {
                               : 'bg-yellow-50 border-yellow-500'
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                             {rec.category}
                           </span>
-                          <span className={`text-sm font-medium px-2 py-1 rounded-full ${
+                          <span className={`text-xs font-medium px-2 py-1 rounded-full ${
                             rec.type === 'critical'
                               ? isDarkMode ? 'bg-red-900 text-red-300' : 'bg-red-100 text-red-700'
                               : rec.type === 'high'
@@ -1004,13 +1178,13 @@ const DSSRecommendations = () => {
                             {rec.type.toUpperCase()}
                           </span>
                         </div>
-                        <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                           {rec.issue}
                         </p>
-                        <p className={`mt-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                        <p className={`mt-1 text-xs font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
                           Action: {rec.action}
                         </p>
-                        <p className={`mt-1 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        <p className={`mt-1 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           Expected Impact: {rec.impact}
                         </p>
                       </div>
@@ -1023,21 +1197,21 @@ const DSSRecommendations = () => {
 
 
             {/* Seasonal Recommendations */}
-            <div className="mt-8">
-              <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            <div className="mt-6">
+              <div className={`p-4 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                     Seasonal Recommendations
                   </h3>
-                  <div className={`px-4 py-2 rounded-full text-sm font-medium ${
+                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
                     isDarkMode ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-700'
                   }`}>
                     {new Date().toLocaleString('default', { month: 'long' })} {new Date().getFullYear()}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {seasonalRecommendations.map((rec, index) => (
-                    <div key={index} className={`p-6 rounded-lg border-l-4 transition-all duration-200 hover:shadow-lg ${
+                    <div key={index} className={`p-4 rounded-lg border-l-4 transition-all duration-200 hover:shadow-lg ${
                       rec.priority === 'critical' 
                         ? isDarkMode 
                           ? 'bg-red-900/20 border-red-500 hover:bg-red-900/30' 
@@ -1050,7 +1224,7 @@ const DSSRecommendations = () => {
                           ? 'bg-blue-900/20 border-blue-500 hover:bg-blue-900/30'
                           : 'bg-blue-50 border-blue-500 hover:bg-blue-100'
                     }`}>
-                      <div className="flex items-center gap-3 mb-4">
+                      <div className="flex items-center gap-2 mb-2">
                         <div className={`p-2 rounded-full ${
                           rec.priority === 'critical'
                             ? isDarkMode ? 'bg-red-900/50' : 'bg-red-100'
@@ -1059,31 +1233,31 @@ const DSSRecommendations = () => {
                             : isDarkMode ? 'bg-blue-900/50' : 'bg-blue-100'
                         }`}>
                           {rec.priority === 'critical' ? (
-                            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
                           ) : rec.priority === 'high' ? (
-                            <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           ) : (
-                            <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           )}
                         </div>
-                        <span className={`font-semibold text-lg ${
+                        <span className={`font-semibold text-md ${
                           isDarkMode ? 'text-white' : 'text-gray-900'
                         }`}>
                           {rec.message}
                         </span>
                       </div>
-                      <ul className="space-y-2">
+                      <ul className="space-y-1">
                         {rec.details.map((detail, i) => (
-                          <li key={i} className={`flex items-start gap-2 ${
+                          <li key={i} className={`flex items-start gap-2 text-sm ${
                             isDarkMode ? 'text-gray-300' : 'text-gray-600'
                           }`}>
-                            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
                             </svg>
                             <span>{detail}</span>
@@ -1097,45 +1271,45 @@ const DSSRecommendations = () => {
             </div>
 
             {/* Best Practices */}
-            <div className="mt-8">
-              <div className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <h3 className={`text-2xl font-bold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            <div className="mt-6">
+              <div className={`p-4 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                <h3 className={`text-xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                   Best Practices
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {bestPractices.map((category, index) => (
-                    <div key={index} className={`p-6 rounded-lg transition-all duration-200 hover:shadow-lg ${
+                    <div key={index} className={`p-4 rounded-lg transition-all duration-200 hover:shadow-lg ${
                       isDarkMode ? 'bg-gray-700/50 hover:bg-gray-700' : 'bg-gray-50 hover:bg-gray-100'
                     }`}>
-                      <div className="flex items-center gap-3 mb-4">
+                      <div className="flex items-center gap-2 mb-3">
                         <div className={`p-2 rounded-full ${
                           isDarkMode ? 'bg-indigo-900/50' : 'bg-indigo-100'
                         }`}>
                           {category.category === 'Planting' ? (
-                            <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                             </svg>
                           ) : category.category === 'Maintenance' ? (
-                            <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                           ) : (
-                            <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                             </svg>
                           )}
                         </div>
-                        <h4 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        <h4 className={`text-md font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                           {category.category}
                         </h4>
                       </div>
-                      <ul className="space-y-3">
+                      <ul className="space-y-2">
                         {category.practices.map((practice, i) => (
-                          <li key={i} className={`flex items-start gap-2 ${
+                          <li key={i} className={`flex items-start gap-2 text-sm ${
                             isDarkMode ? 'text-gray-300' : 'text-gray-600'
                           }`}>
-                            <svg className="w-5 h-5 mt-0.5 flex-shrink-0 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                             </svg>
                             <span>{practice}</span>
@@ -1148,67 +1322,45 @@ const DSSRecommendations = () => {
               </div>
             </div>
             
-            {/* Plants Section */}
-            <div className={`mt-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
-              <h3 className={`text-2xl font-semibold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                Your Current Plants
-              </h3>
-              {plants.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className={`mb-4 text-lg ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                    Please declare plant first.
-                  </p>
-                  <button
-                    className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors duration-200"
-                    onClick={() => navigate('/land-declaration')}
-                  >
-                    Declare Plant
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {plants.map((plant) => (
-                    <div
-                      key={plant.plant_id}
-                      className={`p-6 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} 
-                        hover:shadow-xl transition-all duration-200 cursor-pointer 
-                        ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}
-                      onClick={() => handlePlantClick(plant)}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                            {plant.coffee_variety}
-                          </h3>
-                          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Trees: {plant.number_of_tree_planted}
-                          </p>
-                          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Planted: {new Date(plant.planting_date).toLocaleDateString()}
-                          </p>
-                        </div>
-                        {statuses[plant.plant_id] && (
-                          <div className={`px-4 py-2 rounded-full text-sm font-medium
-                            ${getStatusColor(statuses[plant.plant_id].status)}`}>
-                            {statuses[plant.plant_id].status}
-                          </div>
-                        )}
-                        <div className={`ml-4 p-2 rounded-full ${
-                          isDarkMode ? 'bg-gray-700 text-indigo-400' : 'bg-gray-100 text-indigo-600'
-                        }`}>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-
+            
           </>
+        )}
+
+        {/* PDF Preview Modal */}
+        {isPdfPreviewOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-3xl w-full p-6 relative flex flex-col`} style={{height: '80vh'}}>
+                    <button
+                        className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                        onClick={() => {
+                            setIsPdfPreviewOpen(false);
+                            if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+                            setPdfUrl(null);
+                        }}
+                        aria-label="Close"
+                    >
+                        &times;
+                    </button>
+                    <h2 className={`text-xl font-bold mb-4 text-center ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>PDF Preview</h2>
+                    {pdfUrl && (
+                        <iframe
+                            id="pdf-preview-iframe"
+                            src={pdfUrl}
+                            title="PDF Preview"
+                            className="w-full flex-1 border rounded"
+                            style={{ minHeight: '60vh', background: '#fff' }}
+                        />
+                    )}
+                    <div className="flex justify-end mt-4 gap-2">
+                        <button
+                            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors duration-200"
+                            onClick={() => handleExportWithPreview(true)}
+                        >
+                            Download PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
         )}
       </div>
     </Layout>

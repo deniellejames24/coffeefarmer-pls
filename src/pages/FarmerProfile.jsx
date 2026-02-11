@@ -105,23 +105,25 @@ const FarmerProfile = () => {
 
       if (farmerDetailError) throw farmerDetailError;
 
-      // Fetch plant data
-      const { data: plantData, error: plantError } = await supabase
-        .from('plant_data')
-        .select(`
-          plant_id,
-          coffee_variety,
-          planting_date,
-          number_of_tree_planted,
-          plant_status (
-            status,
-            age_stage,
-            soil_ph,
-            moisture_level,
-            last_fertilized
-          )
-        `)
-        .eq('farmer_id', farmerId);
+              // Fetch plant data
+        const { data: plantData, error: plantError } = await supabase
+          .from('plant_data')
+          .select(`
+            plant_id,
+            coffee_variety,
+            planting_date,
+            number_of_tree_planted,
+            elevation,
+            cluster_size,
+            plant_status (
+              status,
+              age_stage,
+              soil_ph,
+              moisture_level,
+              last_fertilized
+            )
+          `)
+          .eq('farmer_id', farmerId);
 
       if (plantError) throw plantError;
 
